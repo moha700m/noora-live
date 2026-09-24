@@ -1,6 +1,7 @@
 import { GoogleGenAI, type LiveServerMessage, type Session } from "@google/genai";
-import { MAX_RECONNECT_ATTEMPTS, MODEL_NAME, clientLiveConfig } from "./config";
-import { INPUT_MIME } from "./config";
+import { SYSTEM_INSTRUCTION } from "./config";
+import type { VoiceEngine } from "../settings/model";
+import { MAX_RECONNECT_ATTEMPTS, MODEL_NAME, INPUT_MIME, clientLiveConfig } from "./config";
 import { MSG, tokenErrorMessage } from "../utils/messages";
 import { reconnectDelayMs } from "../utils/backoff";
 
@@ -14,6 +15,7 @@ export type LiveClientHandlers = {
   onOutputTranscript: (text: string, finished: boolean) => void;
   onUserActivity: (active: boolean) => void;
   onTurnComplete: () => void;
+  onSession?: (info: { engine: VoiceEngine; instruction: string }) => void;
   onError: (message: string) => void;
 };
 
@@ -22,9 +24,11 @@ type TokenPayload = {
   token?: string;
   error?: string;
   message?: string;
+  instruction?: string;
+  engine?: VoiceEngine;
 };
 
-async function fetchEphemeralToken(): Promise<string> {
+async function fetchEphemeralToken(): Promise<{ token: string; instruction: string; engine: VoiceEngine }> {
   const response = await fetch("/api/gemini/token", {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -42,7 +46,11 @@ async function fetchEphemeralToken(): Promise<string> {
       code: payload?.error || "upstream",
     });
   }
-  return payload.token;
+  return {
+    token: payload.token,
+    instruction: payload.instruction?.trim() || SYSTEM_INSTRUCTION,
+    engine: payload.engine === "elevenlabs" ? "elevenlabs" : "gemini",
+  };
 }
 
 function mimeRate(mime: string | undefined): number {
@@ -58,6 +66,7 @@ export class GeminiLiveClient {
   private ready = false;
   private attempt = 0;
   private timer: ReturnType<typeof setTimeout> | null = null;
+  private instruction = SYSTEM_INSTRUCTION;
   private generation = 0;
 
   constructor(private readonly handlers: LiveClientHandlers) {}
@@ -118,16 +127,18 @@ export class GeminiLiveClient {
         /* ignore */
       }
 
-      const token = await fetchEphemeralToken();
+      const session = await fetchEphemeralToken();
       if (this.stopped || generation !== this.generation) return false;
+      this.instruction = session.instruction;
+      this.handlers.onSession?.({ engine: session.engine, instruction: session.instruction });
 
       const ai = new GoogleGenAI({
-        apiKey: token,
+        apiKey: session.token,
         httpOptions: { apiVersion: "v1alpha" },
       });
-      const session = await ai.live.connect({
+      const live = await ai.live.connect({
         model: MODEL_NAME,
-        config: clientLiveConfig(this.handle),
+        config: clientLiveConfig(this.handle, this.instruction),
         callbacks: {
           onopen: () => {
             /* setupComplete is the real ready signal */
@@ -151,13 +162,13 @@ export class GeminiLiveClient {
 
       if (this.stopped || generation !== this.generation) {
         try {
-          session.close();
+          live.close();
         } catch {
           /* ignore */
         }
         return false;
       }
-      this.session = session;
+      this.session = live;
       return true;
     } catch (error) {
       if (this.stopped || generation !== this.generation) return false;

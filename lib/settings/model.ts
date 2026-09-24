@@ -1,0 +1,57 @@
+export const DEFAULT_VOICE_ID = "qdCWAGl7lBhHi8DaA3b0";
+
+export type VoiceEngine = "gemini" | "elevenlabs";
+
+export type AssistantSettings = {
+  hook: string;
+  system: string;
+  dialect: string;
+  voiceId: string;
+};
+
+export const DEFAULT_SETTINGS: AssistantSettings = {
+  hook: [
+    "أنتِ نورة، مساعدة صوتية بالذكاء الاصطناعي.",
+    "لا تدّعين أنكِ إنسانة. إذا سُئلتِ، قولِي بوضوح إنكِ مساعدة ذكاء اصطناعي.",
+  ].join("\n"),
+  dialect: [
+    "تتحدثين باللهجة السعودية الطبيعية، بأسلوب يومي خفيف، مو فصحى ثقيلة، وبدون عبارات روبوتية.",
+    "تتعاملين بشكل طبيعي مع العربية والإنجليزية المختلطة في نفس الجملة.",
+  ].join("\n"),
+  system: [
+    "كلامك مختصر وطبيعي مثل مكالمة حقيقية.",
+    "لا تكررين كلام المستخدم إلا إذا احتجتِ تتأكدين من تفصيلة مهمة.",
+    "استمعي قبل ما تجاوبين، وجاوبي على السؤال مباشرة.",
+    "اسمحي للمستخدم يقاطعك. إذا قاطعك، وقفي الجملة القديمة وكمّلي من كلامه الجديد.",
+    "إذا ما فهمتِ، اطلبي إعادة الجملة باختصار، مثل: وضّح لي أكثر؟",
+    "لا تخترعين معلومات ولا أخبار ولا أرقام. إذا ما تعرفين، قولِي ذلك باختصار.",
+    "نبرتك ودودة وهادئة.",
+    "لا تبدأين كل رد بـ بالتأكيد أو يسعدني مساعدتك.",
+  ].join("\n"),
+  voiceId: DEFAULT_VOICE_ID,
+};
+
+function clip(value: unknown, fallback: string): string {
+  if (typeof value !== "string") return fallback;
+  const text = value.trim();
+  if (!text) return fallback;
+  return text.slice(0, 4000);
+}
+
+export function isVoiceId(value: unknown): value is string {
+  return typeof value === "string" && /^[A-Za-z0-9]{10,40}$/.test(value);
+}
+
+export function normalizeSettings(input: unknown): AssistantSettings {
+  const raw = input && typeof input === "object" ? (input as Record<string, unknown>) : {};
+  return {
+    hook: clip(raw.hook, DEFAULT_SETTINGS.hook),
+    system: clip(raw.system, DEFAULT_SETTINGS.system),
+    dialect: clip(raw.dialect, DEFAULT_SETTINGS.dialect),
+    voiceId: isVoiceId(raw.voiceId) ? raw.voiceId : DEFAULT_VOICE_ID,
+  };
+}
+
+export function composeInstruction(settings: AssistantSettings): string {
+  return [`الهوية:\n${settings.hook}`, `اللهجة:\n${settings.dialect}`, `النظام:\n${settings.system}`].join("\n\n");
+}

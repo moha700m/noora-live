@@ -1,4 +1,5 @@
 import { Modality, type LiveConnectConfig } from "@google/genai";
+import { composeInstruction, DEFAULT_SETTINGS } from "../settings/model";
 
 export const APP_NAME = "نورة";
 export const ASSISTANT_NAME = "نورة";
@@ -15,23 +16,10 @@ export const INPUT_SAMPLE_RATE = 16_000;
 export const OUTPUT_SAMPLE_RATE = 24_000;
 export const INPUT_MIME = "audio/pcm;rate=16000";
 
-export const SYSTEM_INSTRUCTION = [
-  "أنتِ نورة، مساعدة صوتية بالذكاء الاصطناعي.",
-  "تتحدثين باللهجة السعودية الطبيعية، بأسلوب يومي خفيف، مو فصحى ثقيلة، وبدون عبارات روبوتية.",
-  "كلامك مختصر وطبيعي مثل مكالمة حقيقية.",
-  "لا تكررين كلام المستخدم إلا إذا احتجتِ تتأكدين من تفصيلة مهمة.",
-  "استمعي قبل ما تجاوبين، وجاوبي على السؤال مباشرة.",
-  "اسمحي للمستخدم يقاطعك. إذا قاطعك، وقفي الجملة القديمة وكمّلي من كلامه الجديد.",
-  "إذا ما فهمتِ، اطلبي إعادة الجملة باختصار، مثل: وضّح لي أكثر؟ أو أعد آخر نقطة؟",
-  "تتعاملين بشكل طبيعي مع العربية والإنجليزية المختلطة في نفس الجملة.",
-  "لا تدّعين أنكِ إنسانة. إذا سُئلتِ، قولِي بوضوح إنكِ مساعدة ذكاء اصطناعي.",
-  "لا تخترعين معلومات ولا أخبار ولا أرقام. إذا ما تعرفين، قولِي ذلك باختصار.",
-  "نبرتك ودودة وهادئة.",
-  "لا تبدأين كل رد بـ بالتأكيد أو يسعدني مساعدتك.",
-].join("\n");
+export const SYSTEM_INSTRUCTION = composeInstruction(DEFAULT_SETTINGS);
 
 /** Fields locked into the ephemeral token. The client must send the same values. */
-export function lockedLiveConfig(): LiveConnectConfig {
+export function lockedLiveConfig(instruction = SYSTEM_INSTRUCTION): LiveConnectConfig {
   return {
     responseModalities: [Modality.AUDIO],
     speechConfig: {
@@ -40,16 +28,16 @@ export function lockedLiveConfig(): LiveConnectConfig {
         prebuiltVoiceConfig: { voiceName: VOICE_NAME },
       },
     },
-    systemInstruction: SYSTEM_INSTRUCTION,
+    systemInstruction: instruction,
     inputAudioTranscription: { languageCodes: ["ar-SA", "en-US"] },
     outputAudioTranscription: {},
     contextWindowCompression: { slidingWindow: {} },
   };
 }
 
-export function clientLiveConfig(handle: string | null): LiveConnectConfig {
+export function clientLiveConfig(handle: string | null, instruction = SYSTEM_INSTRUCTION): LiveConnectConfig {
   return {
-    ...lockedLiveConfig(),
+    ...lockedLiveConfig(instruction),
     sessionResumption: handle ? { handle } : {},
   };
 }

@@ -1,6 +1,8 @@
 import { GoogleGenAI } from "@google/genai";
 import { MODEL_NAME, lockedLiveConfig } from "./config";
 import { isAllowedTokenRequest } from "./origin";
+import { composeInstruction } from "../settings/model";
+import { loadSettings } from "../settings/store";
 import type { TokenFailure } from "./types";
 import { MSG } from "../utils/messages";
 
@@ -67,6 +69,10 @@ export async function handleTokenRequest(request: Request): Promise<Response> {
     return failure("not_configured", MSG.notConfigured, 503);
   }
 
+  const settings = await loadSettings();
+  const instruction = composeInstruction(settings);
+  const engine = process.env.ELEVENLABS_API_KEY?.trim() ? "elevenlabs" : "gemini";
+
   try {
     const ai = new GoogleGenAI({
       apiKey,
@@ -82,7 +88,7 @@ export async function handleTokenRequest(request: Request): Promise<Response> {
         newSessionExpireTime,
         liveConnectConstraints: {
           model: MODEL_NAME,
-          config: lockedLiveConfig(),
+          config: lockedLiveConfig(instruction),
         },
       },
     });
@@ -95,6 +101,8 @@ export async function handleTokenRequest(request: Request): Promise<Response> {
         token: created.name,
         expireTime: created.expireTime ?? expireTime,
         newSessionExpireTime: created.newSessionExpireTime ?? newSessionExpireTime,
+        instruction,
+        engine,
       },
       200,
     );

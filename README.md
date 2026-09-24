@@ -15,15 +15,29 @@ npm install
 npm run dev
 ```
 
-## Environment
+## الإدارة
+
+اللوحة على `/admin`.
+
+تعدّل منها:
+
+- الهوك
+- اللهجة
+- النظام
+- معرف صوت ElevenLabs
+
+الإعدادات تُحفظ في `data/settings.json` على GitHub، والمكالمة التالية تقرأها بدون إعادة بناء.
 
 ```bash
-GEMINI_API_KEY=
+ADMIN_PASSWORD=
+SETTINGS_GITHUB_TOKEN=
+ELEVENLABS_API_KEY=
 ```
 
-انسخ `.env.example` إلى `.env.local` محليًا. لا تضع المفتاح في أي متغير يبدأ بـ `NEXT_PUBLIC_`.
+`SETTINGS_GITHUB_TOKEN` توكن GitHub بصلاحية تعديل هذا المستودع فقط. `ELEVENLABS_API_KEY` يخلي الرد يُنطق بصوت ElevenLabs بدل صوت Gemini. إذا المفتاح غير موجود، المكالمة تبقى على صوت Gemini.
 
-الموقع يفتح وينبني بدون المفتاح. عند بدء المكالمة فقط تظهر: «الخدمة الصوتية غير مفعلة بعد.»
+الصوت الافتراضي: `qdCWAGl7lBhHi8DaA3b0`. النموذج: `eleven_flash_v2_5`، والإخراج PCM 24kHz.
+
 
 ## Vercel
 

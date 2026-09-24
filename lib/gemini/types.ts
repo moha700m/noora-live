@@ -3,6 +3,8 @@ export type TokenSuccess = {
   token: string;
   expireTime: string;
   newSessionExpireTime: string;
+  instruction: string;
+  engine: "gemini" | "elevenlabs";
 };
 
 export type TokenFailure = {

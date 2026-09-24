@@ -7,6 +7,8 @@ import { applyTranscript } from "../../lib/audio/transcript";
 import { formatDuration, initialCallState, isInCall, reduceCall, statusLabel } from "../../lib/call/machine";
 import type { CallState } from "../../lib/call/machine";
 import type { TranscriptLine } from "../../lib/gemini/types";
+import { PhraseSpeaker } from "../../lib/audio/speaker";
+import type { VoiceEngine } from "../../lib/settings/model";
 import { MSG, micErrorMessage } from "../../lib/utils/messages";
 
 function supported(): boolean {
@@ -33,6 +35,8 @@ export function useVoiceCall() {
   const clientRef = useRef<GeminiLiveClient | null>(null);
   const micRef = useRef<MicrophoneCapture | null>(null);
   const playRef = useRef<PcmPlayback | null>(null);
+  const speakerRef = useRef<PhraseSpeaker | null>(null);
+  const engineRef = useRef<VoiceEngine>("gemini");
   const audioRef = useRef<AudioContext | null>(null);
   const micMutedRef = useRef(false);
   const hotFrames = useRef(0);
@@ -62,6 +66,8 @@ export function useVoiceCall() {
   const releaseAudio = useCallback(async () => {
     micRef.current?.stop();
     micRef.current = null;
+    speakerRef.current?.clear();
+    speakerRef.current = null;
     await playRef.current?.close();
     playRef.current = null;
     const ctx = audioRef.current;
@@ -96,11 +102,13 @@ export function useVoiceCall() {
         if (status === "failed") dispatch({ type: "FAIL", message: MSG.dropped });
       },
       onAudio: (pcm, sampleRate) => {
+        if (engineRef.current === "elevenlabs") return;
         playRef.current?.enqueue(pcm, sampleRate);
         dispatch({ type: "ASSISTANT_SPEAKING" });
         setLevelSource("assistant");
       },
       onInterrupted: () => {
+        speakerRef.current?.clear();
         playRef.current?.clear();
         dispatch({ type: "USER_SPEAKING", active: true });
         setLevelSource("user");
@@ -112,13 +120,18 @@ export function useVoiceCall() {
       },
       onOutputTranscript: (text, finished) => {
         pushLine("assistant", text, finished);
+        if (engineRef.current === "elevenlabs") speakerRef.current?.push(text, finished);
       },
       onUserActivity: (active) => {
         dispatch({ type: "USER_SPEAKING", active });
         if (!active) dispatch({ type: "THINKING" });
       },
       onTurnComplete: () => {
-        if (!playRef.current?.pending) dispatch({ type: "LISTENING" });
+        if (engineRef.current === "elevenlabs") speakerRef.current?.finish();
+        if (!playRef.current?.pending && !speakerRef.current?.busy) dispatch({ type: "LISTENING" });
+      },
+      onSession: (info) => {
+        engineRef.current = info.engine;
       },
       onError: (message) => {
         dispatch({ type: "FAIL", message });
@@ -143,6 +156,15 @@ export function useVoiceCall() {
     void context.resume();
     const playback = new PcmPlayback(context);
     playRef.current = playback;
+    const speaker = new PhraseSpeaker(
+      playback,
+      () => {
+        dispatch({ type: "ASSISTANT_SPEAKING" });
+        setLevelSource("assistant");
+      },
+      (message) => dispatch({ type: "FAIL", message }),
+    );
+    speakerRef.current = speaker;
 
     const mic = new MicrophoneCapture({
       onLevel: (value) => {
@@ -238,7 +260,11 @@ export function useVoiceCall() {
       if (output > 0.02 && stateRef.current.phase === "assistant_speaking") {
         setLevel(output);
         setLevelSource("assistant");
-      } else if (!playRef.current?.pending && stateRef.current.phase === "assistant_speaking") {
+      } else if (
+        !playRef.current?.pending &&
+        !speakerRef.current?.busy &&
+        stateRef.current.phase === "assistant_speaking"
+      ) {
         dispatch({ type: "LISTENING" });
       }
       frame = requestAnimationFrame(tick);
@@ -255,6 +281,7 @@ export function useVoiceCall() {
   useEffect(() => {
     return () => {
       clientRef.current?.stop(true);
+      speakerRef.current?.clear();
       micRef.current?.stop();
       void playRef.current?.close();
       void audioRef.current?.close();

@@ -18,7 +18,9 @@ export function VoiceCall() {
   return (
     <main className="call-shell">
       <div className="mx-auto flex min-h-dvh w-full max-w-md flex-col items-center justify-between px-6 py-10">
-        <p className="text-xs text-muted">يعمل بواسطة Gemini Live</p>
+        <p className="text-xs text-muted">
+          يعمل بواسطة Gemini Live · <a className="text-teal" href="/admin">الإدارة</a>
+        </p>
 
         <div className="flex w-full flex-col items-center gap-6">
           <AudioOrb level={showCall ? call.level : 0} mode={showCall ? orbMode : "idle"} live={showCall} />
