@@ -36,7 +36,7 @@ ELEVENLABS_API_KEY=
 
 `SETTINGS_GITHUB_TOKEN` توكن GitHub بصلاحية تعديل هذا المستودع فقط. `ELEVENLABS_API_KEY` يخلي الرد يُنطق بصوت ElevenLabs بدل صوت Gemini. إذا المفتاح غير موجود، المكالمة تبقى على صوت Gemini.
 
-الصوت الافتراضي: `qdCWAGl7lBhHi8DaA3b0`. النموذج: `eleven_flash_v2_5`، والإخراج PCM 24kHz.
+الصوت الافتراضي: `qdCWAGl7lBhHi8DaA3b0`. نموذج النطق: `eleven_v3_conversational`، والإخراج PCM 24kHz.
 
 
 ## Vercel

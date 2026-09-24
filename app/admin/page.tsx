@@ -126,6 +126,7 @@ export default function AdminPage() {
                 className="rounded-2xl border border-fg/15 bg-bg px-4 py-3 text-left font-mono text-base tracking-wide text-fg"
               />
               <span>الصوت الحالي للمكالمة: {desk.settings.voiceId.trim() || "غير محدد"}</span>
+              <span>الموديل: Eleven v3 Conversational، نبرة مكالمة احترافية.</span>
             </label>
             <Field label="الهوك" value={desk.settings.hook} onChange={(value) => patch("hook", value)} />
             <Field label="اللهجة" value={desk.settings.dialect} onChange={(value) => patch("dialect", value)} />

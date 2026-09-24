@@ -13,6 +13,7 @@ export class PhraseSpeaker {
   private pumping = false;
   private accumulated = "";
   private abort: AbortController | null = null;
+  private spoken = "";
   private failed = false;
 
   constructor(
@@ -48,6 +49,7 @@ export class PhraseSpeaker {
     this.pending = "";
     this.queue = [];
     this.accumulated = "";
+    this.spoken = "";
     this.failed = false;
     this.play.clear();
   }
@@ -75,7 +77,10 @@ export class PhraseSpeaker {
     try {
       while (this.queue.length > 0 && generation === this.generation) {
         const text = this.queue.shift();
-        if (text) await this.speak(text, generation);
+        if (!text) continue;
+        const previousText = this.spoken.slice(-100);
+        await this.speak(text, generation, previousText);
+        if (generation === this.generation) this.spoken = `${this.spoken} ${text}`.trim();
       }
     } finally {
       this.pumping = false;
@@ -83,7 +88,7 @@ export class PhraseSpeaker {
     }
   }
 
-  private async speak(text: string, generation: number): Promise<void> {
+  private async speak(text: string, generation: number, previousText: string): Promise<void> {
     const controller = new AbortController();
     this.abort = controller;
     let response: Response;
@@ -91,7 +96,7 @@ export class PhraseSpeaker {
       response = await fetch("/api/elevenlabs/speak", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ text }),
+        body: JSON.stringify({ text, previousText }),
         signal: controller.signal,
       });
     } catch {

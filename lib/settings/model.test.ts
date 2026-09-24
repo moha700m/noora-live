@@ -15,8 +15,8 @@ test("settings keep the elevenlabs voice and compose the three fields", () => {
 
 test("speech waits for a phrase boundary", () => {
   assert.equal(takeSpeakable("هلا", false).speak, "");
-  const ready = takeSpeakable("المكالمة وصلت، كيف أساعدك؟", false);
-  assert.equal(ready.speak, "المكالمة وصلت،");
-  assert.match(ready.rest, /أساعدك/);
+  const ready = takeSpeakable("المكالمة وصلت، كيف أساعدك؟ تمام", false);
+  assert.equal(ready.speak, "المكالمة وصلت، كيف أساعدك؟");
+  assert.match(ready.rest, /تمام/);
   assert.equal(takeSpeakable("تمام", true).speak, "تمام");
 });

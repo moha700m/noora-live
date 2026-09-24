@@ -20,6 +20,8 @@ function limited(request: Request): boolean {
   return row.count > 40;
 }
 
+const MODEL_ID = "eleven_v3_conversational";
+
 export async function POST(request: Request) {
   if (!isAllowedTokenRequest(request)) return json({ ok: false, message: "غير مسموح." }, 403);
   if (limited(request)) return json({ ok: false, message: "محاولات كثيرة." }, 429);
@@ -27,9 +29,11 @@ export async function POST(request: Request) {
   if (!key) return json({ ok: false, message: "صوت ElevenLabs غير مفعّل بعد." }, 503);
 
   let text = "";
+  let previousText = "";
   try {
-    const body = (await request.json()) as { text?: unknown };
-    text = typeof body.text === "string" ? body.text.trim().slice(0, 500) : "";
+    const body = (await request.json()) as { text?: unknown; previousText?: unknown };
+    text = typeof body.text === "string" ? body.text.trim().slice(0, 800) : "";
+    previousText = typeof body.previousText === "string" ? body.previousText.trim().slice(-100) : "";
   } catch {
     text = "";
   }
@@ -40,7 +44,7 @@ export async function POST(request: Request) {
   if (!voiceId) return json({ ok: false, message: "معرف الصوت غير صالح." }, 400);
 
   const upstream = await fetch(
-    `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}/stream?output_format=pcm_24000&optimize_streaming_latency=3`,
+    "https://api.elevenlabs.io/v1/text-to-dialogue/stream?output_format=pcm_24000",
     {
       method: "POST",
       headers: {
@@ -49,10 +53,10 @@ export async function POST(request: Request) {
         accept: "application/octet-stream",
       },
       body: JSON.stringify({
-        text,
-        model_id: "eleven_flash_v2_5",
+        inputs: [{ text, voice_id: voiceId }],
+        model_id: MODEL_ID,
         language_code: "ar",
-        voice_settings: { stability: 0.4, similarity_boost: 0.8, style: 0.15, use_speaker_boost: true },
+        settings: previousText ? { previous_text: previousText } : undefined,
       }),
     },
   );
