@@ -1,6 +1,6 @@
 import { GoogleGenAI, type LiveServerMessage, type Session } from "@google/genai";
 import { SYSTEM_INSTRUCTION } from "./config";
-import type { VoiceEngine } from "../settings/model";
+import type { ListenMode, VoiceEngine } from "../settings/model";
 import { MAX_RECONNECT_ATTEMPTS, MODEL_NAME, INPUT_MIME, clientLiveConfig } from "./config";
 import { MSG, tokenErrorMessage } from "../utils/messages";
 import { reconnectDelayMs } from "../utils/backoff";
@@ -28,12 +28,12 @@ type TokenPayload = {
   engine?: VoiceEngine;
 };
 
-async function fetchEphemeralToken(): Promise<{ token: string; instruction: string; engine: VoiceEngine }> {
+async function fetchEphemeralToken(mode: ListenMode): Promise<{ token: string; instruction: string; engine: VoiceEngine }> {
   const response = await fetch("/api/gemini/token", {
     method: "POST",
     headers: { "content-type": "application/json" },
     cache: "no-store",
-    body: "{}",
+    body: JSON.stringify({ mode }),
   });
   let payload: TokenPayload | null = null;
   try {
@@ -67,6 +67,7 @@ export class GeminiLiveClient {
   private attempt = 0;
   private timer: ReturnType<typeof setTimeout> | null = null;
   private instruction = SYSTEM_INSTRUCTION;
+  private mode: ListenMode = "group";
   private generation = 0;
 
   constructor(private readonly handlers: LiveClientHandlers) {}
@@ -75,7 +76,8 @@ export class GeminiLiveClient {
     return this.ready && !this.stopped;
   }
 
-  async start(): Promise<boolean> {
+  async start(mode: ListenMode = "group"): Promise<boolean> {
+    this.mode = mode;
     this.stopped = false;
     this.attempt = 0;
     return this.open(false);
@@ -127,7 +129,7 @@ export class GeminiLiveClient {
         /* ignore */
       }
 
-      const session = await fetchEphemeralToken();
+      const session = await fetchEphemeralToken(this.mode);
       if (this.stopped || generation !== this.generation) return false;
       this.instruction = session.instruction;
       this.handlers.onSession?.({ engine: session.engine, instruction: session.instruction });
@@ -138,7 +140,7 @@ export class GeminiLiveClient {
       });
       const live = await ai.live.connect({
         model: MODEL_NAME,
-        config: clientLiveConfig(this.handle, this.instruction),
+        config: clientLiveConfig(this.handle, this.instruction, this.mode),
         callbacks: {
           onopen: () => {
             /* setupComplete is the real ready signal */

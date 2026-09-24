@@ -59,6 +59,20 @@ export function normalizeSettings(input: unknown): AssistantSettings {
   };
 }
 
-export function composeInstruction(settings: AssistantSettings): string {
-  return [`الهوية:\n${settings.hook}`, `اللهجة:\n${settings.dialect}`, `النظام:\n${settings.system}`].join("\n\n");
+export type ListenMode = "solo" | "group";
+
+export const GROUP_LISTENING = [
+  "وضع المجموعة:",
+  "حولك أكثر من شخص، مو متكلم واحد. استمعي للجميع قبل ما تتكلمين.",
+  "لا تقاطعين أحد، ولا تقطعين جملة عشان تبدين رد.",
+  "إذا تكلم شخص وكمل غيره، اعتبري الكلام متصل وانتظري لين يهدون.",
+  "ميّزي الأفكار إذا تغيّر المتكلم، ورتبي النقاط بدون ما تخترعين أسماء.",
+  "لا تنسبين كلام لشخص إذا ما تبين. قولي: في نقطة، وفي نقطة ثانية.",
+  "بعد الهدوء، جاويبي باختصار على اللي سمعته من الكل، مو على آخر كلمة بس.",
+  "قاعدة المقاطعة تتوقف في هذا الوضع: الاستماع أولى من الرد السريع.",
+].join("\n");
+
+export function composeInstruction(settings: AssistantSettings, mode: ListenMode = "solo"): string {
+  const base = [`الهوية:\n${settings.hook}`, `اللهجة:\n${settings.dialect}`, `النظام:\n${settings.system}`].join("\n\n");
+  return mode === "group" ? `${base}\n\n${GROUP_LISTENING}` : base;
 }

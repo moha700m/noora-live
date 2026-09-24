@@ -8,7 +8,7 @@ import { formatDuration, initialCallState, isInCall, reduceCall, statusLabel } f
 import type { CallState } from "../../lib/call/machine";
 import type { TranscriptLine } from "../../lib/gemini/types";
 import { PhraseSpeaker } from "../../lib/audio/speaker";
-import type { VoiceEngine } from "../../lib/settings/model";
+import type { ListenMode, VoiceEngine } from "../../lib/settings/model";
 import { MSG, micErrorMessage } from "../../lib/utils/messages";
 
 function supported(): boolean {
@@ -36,6 +36,9 @@ export function useVoiceCall() {
   const micRef = useRef<MicrophoneCapture | null>(null);
   const playRef = useRef<PcmPlayback | null>(null);
   const speakerRef = useRef<PhraseSpeaker | null>(null);
+  const [mode, setMode] = useState<ListenMode>("group");
+  const modeRef = useRef<ListenMode>("group");
+  modeRef.current = mode;
   const engineRef = useRef<VoiceEngine>("gemini");
   const audioRef = useRef<AudioContext | null>(null);
   const micMutedRef = useRef(false);
@@ -108,6 +111,7 @@ export function useVoiceCall() {
         setLevelSource("assistant");
       },
       onInterrupted: () => {
+        if (modeRef.current === "group") return;
         speakerRef.current?.clear();
         playRef.current?.clear();
         dispatch({ type: "USER_SPEAKING", active: true });
@@ -201,7 +205,7 @@ export function useVoiceCall() {
 
     dispatch({ type: "PERMISSION_GRANTED" });
     mic.setSending(true);
-    const opened = await ensureClient().start();
+    const opened = await ensureClient().start(modeRef.current);
     if (!opened) return;
     if (!startedAt.current) {
         startedAt.current = Date.now();
@@ -222,7 +226,7 @@ export function useVoiceCall() {
     }
     dispatch({ type: "RECONNECTING" });
     try {
-      await ensureClient().start();
+      await ensureClient().start(modeRef.current);
     } catch {
       dispatch({ type: "FAIL", message: MSG.dropped });
     }
@@ -304,5 +308,7 @@ export function useVoiceCall() {
     retry,
     toggleMic,
     toggleSpeaker,
+    mode,
+    setMode,
   };
 }

@@ -10,6 +10,7 @@ test("settings keep the elevenlabs voice and compose the three fields", () => {
   assert.match(instruction, /الهوية/);
   assert.match(instruction, /اللهجة/);
   assert.match(instruction, /النظام/);
+  assert.match(composeInstruction(settings, "group"), /وضع المجموعة/);
   assert.equal(normalizeSettings({ voiceId: "bad" }).voiceId, DEFAULT_VOICE_ID);
 });
 

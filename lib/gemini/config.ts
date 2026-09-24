@@ -1,5 +1,5 @@
-import { Modality, type LiveConnectConfig } from "@google/genai";
-import { composeInstruction, DEFAULT_SETTINGS } from "../settings/model";
+import { ActivityHandling, EndSensitivity, Modality, StartSensitivity, type LiveConnectConfig } from "@google/genai";
+import { composeInstruction, DEFAULT_SETTINGS, type ListenMode } from "../settings/model";
 
 export const APP_NAME = "نورة";
 export const ASSISTANT_NAME = "نورة";
@@ -18,9 +18,8 @@ export const INPUT_MIME = "audio/pcm;rate=16000";
 
 export const SYSTEM_INSTRUCTION = composeInstruction(DEFAULT_SETTINGS);
 
-/** Fields locked into the ephemeral token. The client must send the same values. */
-export function lockedLiveConfig(instruction = SYSTEM_INSTRUCTION): LiveConnectConfig {
-  return {
+export function lockedLiveConfig(instruction = SYSTEM_INSTRUCTION, mode: ListenMode = "solo"): LiveConnectConfig {
+  const config: LiveConnectConfig = {
     responseModalities: [Modality.AUDIO],
     speechConfig: {
       languageCode: "ar",
@@ -33,11 +32,28 @@ export function lockedLiveConfig(instruction = SYSTEM_INSTRUCTION): LiveConnectC
     outputAudioTranscription: {},
     contextWindowCompression: { slidingWindow: {} },
   };
+  if (mode === "group") {
+    config.realtimeInputConfig = {
+      activityHandling: ActivityHandling.NO_INTERRUPTION,
+      automaticActivityDetection: {
+        disabled: false,
+        startOfSpeechSensitivity: StartSensitivity.START_SENSITIVITY_LOW,
+        endOfSpeechSensitivity: EndSensitivity.END_SENSITIVITY_LOW,
+        prefixPaddingMs: 500,
+        silenceDurationMs: 2200,
+      },
+    };
+  }
+  return config;
 }
 
-export function clientLiveConfig(handle: string | null, instruction = SYSTEM_INSTRUCTION): LiveConnectConfig {
+export function clientLiveConfig(
+  handle: string | null,
+  instruction = SYSTEM_INSTRUCTION,
+  mode: ListenMode = "solo",
+): LiveConnectConfig {
   return {
-    ...lockedLiveConfig(instruction),
+    ...lockedLiveConfig(instruction, mode),
     sessionResumption: handle ? { handle } : {},
   };
 }

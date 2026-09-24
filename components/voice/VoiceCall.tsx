@@ -52,14 +52,37 @@ export function VoiceCall() {
               disabled={call.state.phase === "ending"}
             />
           ) : (
-            <button
-              type="button"
-              className="grid h-24 w-24 place-items-center rounded-full bg-teal text-bg focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-teal"
-              aria-label="بدء المكالمة"
-              onClick={() => void call.beginSession()}
-            >
-              <Phone className="h-8 w-8" />
-            </button>
+            <div className="flex w-full flex-col items-center gap-4">
+              <div className="grid w-full grid-cols-2 gap-2 rounded-full bg-fg/5 p-1 text-sm" role="group" aria-label="طريقة الاستماع">
+                <button
+                  type="button"
+                  className={call.mode === "solo" ? "rounded-full bg-teal py-2 text-bg" : "rounded-full py-2 text-muted"}
+                  onClick={() => call.setMode("solo")}
+                >
+                  شخص واحد
+                </button>
+                <button
+                  type="button"
+                  className={call.mode === "group" ? "rounded-full bg-teal py-2 text-bg" : "rounded-full py-2 text-muted"}
+                  onClick={() => call.setMode("group")}
+                >
+                  مجموعة
+                </button>
+              </div>
+              <p className="text-center text-xs text-muted">
+                {call.mode === "group"
+                  ? "تستمع للكل، تميّز النقاط، وما تقطع إلا بعد ما يهدون."
+                  : "ترد بسرعة وتوقف كلامها إذا قاطعتها."}
+              </p>
+              <button
+                type="button"
+                className="grid h-24 w-24 place-items-center rounded-full bg-teal text-bg focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-teal"
+                aria-label="بدء المكالمة"
+                onClick={() => void call.beginSession()}
+              >
+                <Phone className="h-8 w-8" />
+              </button>
+            </div>
           )}
           {call.state.phase === "error" && call.state.wasLive ? (
             <button type="button" className="text-sm text-teal underline-offset-4 hover:underline" onClick={() => void call.retry()}>

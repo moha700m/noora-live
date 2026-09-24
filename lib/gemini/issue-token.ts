@@ -1,7 +1,7 @@
 import { GoogleGenAI } from "@google/genai";
 import { MODEL_NAME, lockedLiveConfig } from "./config";
 import { isAllowedTokenRequest } from "./origin";
-import { composeInstruction } from "../settings/model";
+import { composeInstruction, type ListenMode } from "../settings/model";
 import { loadSettings } from "../settings/store";
 import type { TokenFailure } from "./types";
 import { MSG } from "../utils/messages";
@@ -70,7 +70,14 @@ export async function handleTokenRequest(request: Request): Promise<Response> {
   }
 
   const settings = await loadSettings();
-  const instruction = composeInstruction(settings);
+  let mode: ListenMode = "group";
+  try {
+    const body = (await request.clone().json()) as { mode?: unknown };
+    if (body.mode === "solo" || body.mode === "group") mode = body.mode;
+  } catch {
+    mode = "group";
+  }
+  const instruction = composeInstruction(settings, mode);
   const engine = process.env.ELEVENLABS_API_KEY?.trim() ? "elevenlabs" : "gemini";
 
   try {
@@ -88,7 +95,7 @@ export async function handleTokenRequest(request: Request): Promise<Response> {
         newSessionExpireTime,
         liveConnectConstraints: {
           model: MODEL_NAME,
-          config: lockedLiveConfig(instruction),
+          config: lockedLiveConfig(instruction, mode),
         },
       },
     });
