@@ -123,7 +123,7 @@ export class GeminiLiveClient {
 
       const ai = new GoogleGenAI({
         apiKey: token,
-        httpOptions: { apiVersion: "v1beta" },
+        httpOptions: { apiVersion: "v1alpha" },
       });
       const session = await ai.live.connect({
         model: MODEL_NAME,

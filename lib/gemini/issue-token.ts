@@ -70,7 +70,7 @@ export async function handleTokenRequest(request: Request): Promise<Response> {
   try {
     const ai = new GoogleGenAI({
       apiKey,
-      httpOptions: { apiVersion: "v1beta" },
+      httpOptions: { apiVersion: "v1alpha" },
     });
     const now = Date.now();
     const expireTime = new Date(now + 30 * 60 * 1000).toISOString();

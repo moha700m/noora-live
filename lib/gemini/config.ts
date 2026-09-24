@@ -50,6 +50,6 @@ export function lockedLiveConfig(): LiveConnectConfig {
 export function clientLiveConfig(handle: string | null): LiveConnectConfig {
   return {
     ...lockedLiveConfig(),
-    sessionResumption: handle ? { handle, transparent: true } : { transparent: true },
+    sessionResumption: handle ? { handle } : {},
   };
 }
