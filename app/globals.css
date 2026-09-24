@@ -1,0 +1,80 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "IBM Plex Sans Arabic", "Segoe UI", Tahoma, sans-serif;
+  --color-bg: #090b10;
+  --color-fg: #f4efe6;
+  --color-muted: #a3acb9;
+  --color-teal: #3dbea6;
+  --color-coral: #e85d4c;
+}
+
+@layer base {
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+
+  html,
+  body {
+    background: var(--color-bg);
+    color: var(--color-fg);
+    font-family: var(--font-sans);
+  }
+}
+
+.call-shell {
+  min-height: 100dvh;
+  background:
+    radial-gradient(ellipse at 50% 28%, color-mix(in srgb, var(--color-teal) 22%, transparent), transparent 46%),
+    var(--color-bg);
+}
+
+.orb-ring {
+  position: absolute;
+  height: 10.5rem;
+  width: 10.5rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--color-teal) 55%, transparent);
+}
+
+.orb-ring-inner {
+  height: 8.5rem;
+  width: 8.5rem;
+}
+
+.orb-core {
+  height: 6.5rem;
+  width: 6.5rem;
+  border-radius: 999px;
+  background: radial-gradient(circle at 38% 32%, var(--color-fg), var(--color-teal) 46%, var(--color-bg) 78%);
+  box-shadow: 0 0 36px color-mix(in srgb, var(--color-teal) 35%, transparent);
+}
+
+.orb-core-live {
+  animation: orb-breathe 3.2s ease-in-out infinite;
+}
+
+.orb-core-speak {
+  box-shadow: 0 0 48px color-mix(in srgb, var(--color-teal) 55%, transparent);
+}
+
+@keyframes orb-breathe {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.035);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .orb-core,
+  .orb-core-live,
+  .orb-ring {
+    animation: none !important;
+    transition: none !important;
+    transform: none !important;
+  }
+}
