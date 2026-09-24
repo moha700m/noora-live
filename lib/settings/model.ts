@@ -39,7 +39,14 @@ function clip(value: unknown, fallback: string): string {
 }
 
 export function isVoiceId(value: unknown): value is string {
-  return typeof value === "string" && /^[A-Za-z0-9]{10,40}$/.test(value);
+  return typeof value === "string" && /^[A-Za-z0-9]{10,40}$/.test(value.trim());
+}
+
+export function voiceIdError(value: string): string | null {
+  const id = value.trim();
+  if (!id) return "اكتب رمز الصوت.";
+  if (!isVoiceId(id)) return "رمز الصوت لازم يكون حروفًا وأرقامًا، من 10 إلى 40.";
+  return null;
 }
 
 export function normalizeSettings(input: unknown): AssistantSettings {
@@ -48,7 +55,7 @@ export function normalizeSettings(input: unknown): AssistantSettings {
     hook: clip(raw.hook, DEFAULT_SETTINGS.hook),
     system: clip(raw.system, DEFAULT_SETTINGS.system),
     dialect: clip(raw.dialect, DEFAULT_SETTINGS.dialect),
-    voiceId: isVoiceId(raw.voiceId) ? raw.voiceId : DEFAULT_VOICE_ID,
+    voiceId: isVoiceId(raw.voiceId) ? raw.voiceId.trim() : DEFAULT_VOICE_ID,
   };
 }
 

@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import type { AssistantSettings } from "../../lib/settings/model";
+import { voiceIdError } from "../../lib/settings/model";
 
 type Desk = {
   settings: AssistantSettings;
@@ -61,6 +62,11 @@ export default function AdminPage() {
   async function save(event: FormEvent) {
     event.preventDefault();
     if (!desk) return;
+    const voiceError = voiceIdError(desk.settings.voiceId);
+    if (voiceError) {
+      setMessage(voiceError);
+      return;
+    }
     setPending(true);
     setMessage("");
     const response = await fetch("/api/admin/settings", {
@@ -70,7 +76,7 @@ export default function AdminPage() {
     });
     const body = (await response.json()) as { message?: string };
     setPending(false);
-    setMessage(response.ok ? "تم الحفظ. المكالمة الجاية تستخدم الإعدادات الجديدة." : body.message || "تعذر الحفظ.");
+    setMessage(response.ok ? "تم الحفظ، بما فيه رمز الصوت. المكالمة الجاية تستخدمه." : body.message || "تعذر الحفظ.");
   }
 
   function patch(key: keyof AssistantSettings, value: string) {
@@ -107,18 +113,23 @@ export default function AdminPage() {
         ) : null}
         {desk && authed ? (
           <form className="flex flex-col gap-4" onSubmit={(event) => void save(event)}>
+            <label className="flex flex-col gap-2 rounded-3xl border border-teal/40 bg-teal/10 p-4 text-sm text-muted">
+              رمز صوت ElevenLabs
+              <input
+                dir="ltr"
+                inputMode="text"
+                autoCapitalize="off"
+                autoCorrect="off"
+                spellCheck={false}
+                value={desk.settings.voiceId}
+                onChange={(event) => patch("voiceId", event.target.value)}
+                className="rounded-2xl border border-fg/15 bg-bg px-4 py-3 text-left font-mono text-base tracking-wide text-fg"
+              />
+              <span>الصوت الحالي للمكالمة: {desk.settings.voiceId.trim() || "غير محدد"}</span>
+            </label>
             <Field label="الهوك" value={desk.settings.hook} onChange={(value) => patch("hook", value)} />
             <Field label="اللهجة" value={desk.settings.dialect} onChange={(value) => patch("dialect", value)} />
             <Field label="النظام" value={desk.settings.system} onChange={(value) => patch("system", value)} />
-            <label className="flex flex-col gap-2 text-sm text-muted">
-              معرف صوت ElevenLabs
-              <input
-                dir="ltr"
-                value={desk.settings.voiceId}
-                onChange={(event) => patch("voiceId", event.target.value.trim())}
-                className="rounded-2xl border border-fg/15 bg-fg/5 px-4 py-3 text-start text-fg"
-              />
-            </label>
             <p className="text-sm text-muted">
               {desk.elevenLabs
                 ? "صوت ElevenLabs مفعّل في هذا النشر."

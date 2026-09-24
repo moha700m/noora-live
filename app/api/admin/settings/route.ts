@@ -1,7 +1,7 @@
 import { isAdminRequest } from "../../../../lib/admin/session";
 import { isAllowedTokenRequest } from "../../../../lib/gemini/origin";
 import { json } from "../../../../lib/http/json";
-import { normalizeSettings } from "../../../../lib/settings/model";
+import { normalizeSettings, voiceIdError } from "../../../../lib/settings/model";
 import { canSaveSettings, loadSettings, saveSettings } from "../../../../lib/settings/store";
 
 export const dynamic = "force-dynamic";
@@ -34,6 +34,10 @@ export async function PUT(request: Request) {
   } catch {
     body = null;
   }
+  const raw = body && typeof body === "object" ? (body as { voiceId?: unknown }) : {};
+  const typedVoice = typeof raw.voiceId === "string" ? raw.voiceId : "";
+  const voiceError = voiceIdError(typedVoice);
+  if (voiceError) return json({ ok: false, message: voiceError }, 400);
   const settings = normalizeSettings(body);
   const result = await saveSettings(settings);
   if (result === "no_token") {
