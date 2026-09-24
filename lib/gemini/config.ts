@@ -43,6 +43,17 @@ export function lockedLiveConfig(instruction = SYSTEM_INSTRUCTION, mode: ListenM
         silenceDurationMs: 2200,
       },
     };
+  } else {
+    config.realtimeInputConfig = {
+      activityHandling: ActivityHandling.START_OF_ACTIVITY_INTERRUPTS,
+      automaticActivityDetection: {
+        disabled: false,
+        startOfSpeechSensitivity: StartSensitivity.START_SENSITIVITY_HIGH,
+        endOfSpeechSensitivity: EndSensitivity.END_SENSITIVITY_HIGH,
+        prefixPaddingMs: 100,
+        silenceDurationMs: 280,
+      },
+    };
   }
   return config;
 }

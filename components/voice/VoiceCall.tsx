@@ -72,7 +72,7 @@ export function VoiceCall() {
               <p className="text-center text-xs text-muted">
                 {call.mode === "group"
                   ? "تستمع للكل، تميّز النقاط، وما تقطع إلا بعد ما يهدون."
-                  : "ترد بسرعة وتوقف كلامها إذا قاطعتها."}
+                  : "تفهم من أول جملة وترد بسرعة، وتوقف إذا قاطعتها."}
               </p>
               <button
                 type="button"

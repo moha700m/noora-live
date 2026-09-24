@@ -15,12 +15,17 @@ export class PhraseSpeaker {
   private abort: AbortController | null = null;
   private spoken = "";
   private failed = false;
+  private fast = false;
 
   constructor(
     private readonly play: Playback,
     private readonly onActive: () => void,
     private readonly onError: (message: string) => void,
   ) {}
+
+  setFast(fast: boolean): void {
+    this.fast = fast;
+  }
 
   get busy(): boolean {
     return this.pumping || this.queue.length > 0 || this.pending.trim().length > 0;
@@ -57,7 +62,7 @@ export class PhraseSpeaker {
   private drain(finished: boolean): void {
     let rest = this.pending;
     while (rest.trim()) {
-      const next = takeSpeakable(rest, finished);
+      const next = takeSpeakable(rest, finished, this.fast);
       if (!next.speak) {
         rest = next.rest;
         break;

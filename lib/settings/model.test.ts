@@ -10,6 +10,8 @@ test("settings keep the elevenlabs voice and compose the three fields", () => {
   assert.match(instruction, /الهوية/);
   assert.match(instruction, /اللهجة/);
   assert.match(instruction, /النظام/);
+  assert.match(composeInstruction(settings), /وضع الشخص الواحد/);
+  assert.match(composeInstruction(settings), /وضع الشخص الواحد/);
   assert.match(composeInstruction(settings, "group"), /وضع المجموعة/);
   assert.equal(normalizeSettings({ voiceId: "bad" }).voiceId, DEFAULT_VOICE_ID);
 });
@@ -19,5 +21,5 @@ test("speech waits for a phrase boundary", () => {
   const ready = takeSpeakable("المكالمة وصلت، كيف أساعدك؟ تمام", false);
   assert.equal(ready.speak, "المكالمة وصلت، كيف أساعدك؟");
   assert.match(ready.rest, /تمام/);
-  assert.equal(takeSpeakable("تمام", true).speak, "تمام");
+  assert.equal(takeSpeakable("تمام، كمّل الكلام", false, true).speak, "تمام،");
 });

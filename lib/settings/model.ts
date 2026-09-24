@@ -72,7 +72,16 @@ export const GROUP_LISTENING = [
   "قاعدة المقاطعة تتوقف في هذا الوضع: الاستماع أولى من الرد السريع.",
 ].join("\n");
 
+export const SOLO_LISTENING = [
+  "وضع الشخص الواحد:",
+  "افهمي المقصود من أول جملة وردي فورًا، مثل مكالمة سريعة.",
+  "لا تستنين صمت طويل ولا تكملة إذا المعنى واضح.",
+  "ابدئي الرد بكلمات قليلة مباشرة، بدون مقدمة.",
+  "إذا قاطعك، وقفي فورًا وكمّلي من كلامه الجديد.",
+].join("\n");
+
 export function composeInstruction(settings: AssistantSettings, mode: ListenMode = "solo"): string {
   const base = [`الهوية:\n${settings.hook}`, `اللهجة:\n${settings.dialect}`, `النظام:\n${settings.system}`].join("\n\n");
-  return mode === "group" ? `${base}\n\n${GROUP_LISTENING}` : base;
+  const pace = mode === "group" ? GROUP_LISTENING : SOLO_LISTENING;
+  return `${base}\n\n${pace}`;
 }

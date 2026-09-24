@@ -169,6 +169,7 @@ export function useVoiceCall() {
       (message) => dispatch({ type: "FAIL", message }),
     );
     speakerRef.current = speaker;
+    speaker.setFast(modeRef.current === "solo");
 
     const mic = new MicrophoneCapture({
       onLevel: (value) => {
@@ -225,6 +226,7 @@ export function useVoiceCall() {
       return;
     }
     dispatch({ type: "RECONNECTING" });
+    speakerRef.current?.setFast(modeRef.current === "solo");
     try {
       await ensureClient().start(modeRef.current);
     } catch {
