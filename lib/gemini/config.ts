@@ -1,16 +1,12 @@
 import { ActivityHandling, EndSensitivity, Modality, StartSensitivity, type LiveConnectConfig } from "@google/genai";
 import { composeInstruction, DEFAULT_SETTINGS, type ListenMode } from "../settings/model";
 
-export const APP_NAME = "نورة";
-export const ASSISTANT_NAME = "نورة";
+export const APP_NAME = "سايبر";
+export const ASSISTANT_NAME = "سايبر";
 
-/** Stable Gemini Live model confirmed in Google docs (September 2026). */
 export const MODEL_NAME = "gemini-3.8-live";
-
-/** Female prebuilt voice. Aoede is listed as "Breezy" / Female. */
 export const VOICE_NAME = "Aoede";
-
-export const MAX_RECONNECT_ATTEMPTS = 5;
+export const MAX_RECONNECT_ATTEMPTS = 2;
 
 export const INPUT_SAMPLE_RATE = 16_000;
 export const OUTPUT_SAMPLE_RATE = 24_000;
@@ -63,8 +59,7 @@ export function clientLiveConfig(
   instruction = SYSTEM_INSTRUCTION,
   mode: ListenMode = "solo",
 ): LiveConnectConfig {
-  return {
-    ...lockedLiveConfig(instruction, mode),
-    sessionResumption: handle ? { handle } : {},
-  };
+  const config = lockedLiveConfig(instruction, mode);
+  if (handle) config.sessionResumption = { handle };
+  return config;
 }

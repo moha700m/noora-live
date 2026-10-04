@@ -3,8 +3,8 @@ import type { ReactNode } from "react";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "نورة | مكالمة صوتية بالذكاء الاصطناعي",
-  description: "تحدث مباشرة مع مساعدة صوتية بالذكاء الاصطناعي من خلال المتصفح.",
+  title: "سايبر | مكالمة صوتية",
+  description: "تحدث مباشرة مع سايبر من المتصفح.",
   icons: { icon: "/favicon.svg" },
 };
 

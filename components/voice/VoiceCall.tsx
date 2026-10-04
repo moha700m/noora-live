@@ -19,14 +19,14 @@ export function VoiceCall() {
     <main className="call-shell">
       <div className="mx-auto flex min-h-dvh w-full max-w-md flex-col items-center justify-between px-6 py-10">
         <p className="text-xs text-muted">
-          صوت نورة · Vibi · <a className="text-teal" href="/admin">الإدارة</a>
+          سايبر · Vibi · <a className="text-teal" href="/admin">الإدارة</a>
         </p>
 
         <div className="flex w-full flex-col items-center gap-6">
           <AudioOrb level={showCall ? call.level : 0} mode={showCall ? orbMode : "idle"} live={showCall} />
           <CallStatus
             title={ASSISTANT_NAME}
-            subtitle={showCall ? undefined : "مساعدة صوتية بالذكاء الاصطناعي"}
+            subtitle={showCall ? undefined : "مساعد صوتي، شخصية رقمية"}
             status={showCall || call.state.phase === "error" || call.state.phase === "ended" ? call.status : "اضغط لبدء مكالمة صوتية"}
             timer={showCall ? call.seconds : undefined}
             connected={showCall && call.state.phase !== "connecting" && call.state.phase !== "requesting_permission" && call.state.phase !== "error"}
@@ -71,8 +71,8 @@ export function VoiceCall() {
               </div>
               <p className="text-center text-xs text-muted">
                 {call.mode === "group"
-                  ? "تستمع للكل، تميّز النقاط، وما تقطع إلا بعد ما يهدون."
-                  : "تفهم من أول جملة وترد بسرعة، وتوقف إذا قاطعتها."}
+                  ? "يستمع للكل، وما يقطع إلا بعد ما يهدون."
+                  : "يفهم من أول جملة ويرد بسرعة."}
               </p>
               <button
                 type="button"

@@ -108,12 +108,12 @@ export function statusLabel(state: CallState): string {
     case "reconnecting":
       return "جاري إعادة الاتصال…";
     case "assistant_speaking":
-      return "تتحدث…";
+      return "يتحدث…";
     case "assistant_thinking":
-      return "تفكر…";
+      return "يفكر…";
     case "user_speaking":
     case "connected":
-      return "تستمع…";
+      return "يستمع…";
     case "muted":
       return "المايك مكتوم";
     case "ending":
@@ -121,7 +121,7 @@ export function statusLabel(state: CallState): string {
     case "ended":
       return "انتهت المكالمة";
     case "error":
-      return state.errorMessage ?? "تعذر الاتصال بالمساعدة الصوتية.";
+      return state.errorMessage ?? "تعذر الاتصال بسايبر.";
     default:
       return "";
   }
