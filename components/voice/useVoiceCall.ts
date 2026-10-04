@@ -70,14 +70,15 @@ export function useVoiceCall() {
   modeRef.current = mode;
   const audioRef = useRef<AudioContext | null>(null);
   const micMutedRef = useRef(false);
-  const hotFrames = useRef(0);
-  const coolFrames = useRef(0);
   const startedAt = useRef<number | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const chunksRef = useRef<Int16Array[]>([]);
   const samplesRef = useRef(0);
   const busyRef = useRef(false);
   const historyRef = useRef<{ role: "user" | "assistant"; content: string }[]>([]);
+  const voiceSince = useRef<number | null>(null);
+  const lastVoiceAt = useRef(0);
+  const talkMs = useRef(0);
 
   const dispatch = useCallback((event: Parameters<typeof reduceCall>[1]) => {
     setState((current) => {
@@ -132,15 +133,18 @@ export function useVoiceCall() {
     if (busyRef.current || micMutedRef.current) return;
     const chunks = chunksRef.current;
     const samples = samplesRef.current;
+    const spoke = talkMs.current;
     chunksRef.current = [];
     samplesRef.current = 0;
-    if (samples < 16000 * 0.25) return;
+    talkMs.current = 0;
+    voiceSince.current = null;
+    if (samples < 16000 * 0.45 || spoke < 350) return;
     busyRef.current = true;
     dispatch({ type: "THINKING" });
     try {
       const body = new FormData();
       body.set("audio", wavBlob(chunks), "speech.wav");
-      body.set("history", JSON.stringify(historyRef.current.slice(-4)));
+      body.set("history", JSON.stringify(historyRef.current.slice(-8)));
       body.set("mode", modeRef.current);
       const response = await fetch("/api/openai/turn", { method: "POST", body });
       const payload = (await response.json().catch(() => null)) as { ok?: boolean; heard?: string; reply?: string; message?: string } | null;
@@ -191,26 +195,32 @@ export function useVoiceCall() {
     speaker.setFast(true);
     const mic = new MicrophoneCapture({
       onLevel: (value) => {
+        const now = Date.now();
+        const talking = value > 0.11;
+        if (talking) {
+          if (!voiceSince.current) voiceSince.current = now;
+          lastVoiceAt.current = now;
+          talkMs.current += 40;
+          if (now - voiceSince.current > 180) dispatch({ type: "USER_SPEAKING", active: true });
+          if (speakerRef.current?.busy && now - voiceSince.current > 280) {
+            speakerRef.current.clear();
+            playRef.current?.clear();
+          }
+        } else if (voiceSince.current && now - lastVoiceAt.current > 220) {
+          voiceSince.current = null;
+        }
         if (busyRef.current || speakerRef.current?.busy) return;
         setLevel(value);
         setLevelSource("user");
-        if (micMutedRef.current) return;
-        if (value > 0.08) {
-          hotFrames.current += 1;
-          coolFrames.current = 0;
-          if (hotFrames.current > 1) dispatch({ type: "USER_SPEAKING", active: true });
-        } else {
-          coolFrames.current += 1;
-          hotFrames.current = 0;
-          const wait = modeRef.current === "group" ? 10 : 3;
-          if (coolFrames.current > wait && samplesRef.current > 16000 * 0.25) void flush();
-        }
+        if (micMutedRef.current || talking) return;
+        const gap = modeRef.current === "group" ? 1500 : 900;
+        if (lastVoiceAt.current && now - lastVoiceAt.current > gap && samplesRef.current > 16000 * 0.45) void flush();
       },
       onPcm: (pcm) => {
-        if (micMutedRef.current || busyRef.current || speakerRef.current?.busy) return;
+        if (micMutedRef.current || busyRef.current) return;
         chunksRef.current.push(pcm);
         samplesRef.current += pcm.length;
-        if (samplesRef.current > 16000 * 8) void flush();
+        if (samplesRef.current > 16000 * 12) void flush();
       },
     });
     micRef.current = mic;

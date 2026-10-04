@@ -2,7 +2,7 @@ import { composeInstruction, type ListenMode } from "../settings/model";
 import { loadSettings } from "../settings/store";
 import { MSG } from "../utils/messages";
 
-const CHAT_MODELS = ["gpt-4.1-mini", "gpt-4o-mini"];
+const CHAT_MODELS = ["gpt-4.1", "gpt-4o", "gpt-4.1-mini"];
 const TRANSCRIBE_MODELS = ["gpt-4o-mini-transcribe", "whisper-1"];
 
 export type TurnMessage = { role: "user" | "assistant"; content: string };
@@ -32,6 +32,7 @@ async function transcribe(file: File): Promise<string> {
     const form = new FormData();
     form.set("model", model);
     form.set("language", "ar");
+    form.set("prompt", "مكالمة سعودية عن Call of Duty. كلام عامي.");
     form.set("file", file, file.name || "speech.wav");
     const response = await openai("/v1/audio/transcriptions", form);
     const payload = (await response.json().catch(() => null)) as { text?: string; error?: { message?: string } } | null;
@@ -46,9 +47,9 @@ async function reply(instruction: string, history: TurnMessage[], heard: string)
   const messages = [
     {
       role: "system",
-      content: `${instruction}\n\nالرد الحين صوتي وسريع. جملة إلى ثلاث جمل فقط. بدون مقدمة وبدون تفكير ظاهر.`,
+      content: `${instruction}\n\nالمتكلم خلص كلامه. لا تقاطعه ولا تكمّل جملته.\nافهم المقصود الحقيقي، مو أول كلمة. إذا الكلام ناقص أو مو واضح، اسأل سؤال واحد قصير بدل ما تخمّن.\nالرد صوتي: جملتين أو ثلاث إذا الموقف يبي شرح، وفيها ملاحظة كود دقيقة إذا السؤال عن اللعب. بدون مقدمة وبدون تفكير ظاهر.`,
     },
-    ...history.slice(-4),
+    ...history.slice(-8),
     { role: "user", content: heard },
   ];
   let last = "";
@@ -57,8 +58,8 @@ async function reply(instruction: string, history: TurnMessage[], heard: string)
       "/v1/chat/completions",
       JSON.stringify({
         model,
-        temperature: 0.7,
-        max_tokens: 120,
+        temperature: 0.6,
+        max_tokens: 220,
         messages,
       }),
       "application/json",
