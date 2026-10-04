@@ -166,7 +166,9 @@ export function useVoiceCall() {
         dispatch({ type: "ASSISTANT_SPEAKING" });
         setLevelSource("assistant");
       },
-      (message) => dispatch({ type: "FAIL", message }),
+      () => {
+        /* synthesis failure should not end the live session */
+      },
     );
     speakerRef.current = speaker;
     speaker.setFast(modeRef.current === "solo");
