@@ -2,7 +2,7 @@ import { composeInstruction, type ListenMode } from "../settings/model";
 import { loadSettings } from "../settings/store";
 import { MSG } from "../utils/messages";
 
-const CHAT_MODELS = ["gpt-4.1-mini", "gpt-4o-mini", "gpt-5-mini"];
+const CHAT_MODELS = ["gpt-4.1-mini", "gpt-4o-mini"];
 const TRANSCRIBE_MODELS = ["gpt-4o-mini-transcribe", "whisper-1"];
 
 export type TurnMessage = { role: "user" | "assistant"; content: string };
@@ -44,8 +44,11 @@ async function transcribe(file: File): Promise<string> {
 
 async function reply(instruction: string, history: TurnMessage[], heard: string): Promise<string> {
   const messages = [
-    { role: "system", content: instruction },
-    ...history.slice(-8),
+    {
+      role: "system",
+      content: `${instruction}\n\nالرد مكالمة سريعة. جملة واحدة قصيرة، أقل من عشر كلمات. بدون مقدمة.`,
+    },
+    ...history.slice(-4),
     { role: "user", content: heard },
   ];
   let last = "";
@@ -54,8 +57,8 @@ async function reply(instruction: string, history: TurnMessage[], heard: string)
       "/v1/chat/completions",
       JSON.stringify({
         model,
-        temperature: 0.6,
-        max_tokens: 220,
+        temperature: 0.4,
+        max_tokens: 70,
         messages,
       }),
       "application/json",

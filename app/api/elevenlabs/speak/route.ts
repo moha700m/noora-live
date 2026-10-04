@@ -5,10 +5,11 @@ import { loadSettings } from "../../../../lib/settings/store";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
-export const maxDuration = 60;
+export const maxDuration = 30;
 
 const hits = new Map<string, { count: number; reset: number }>();
 const VIBI = "https://api.vibi.pro";
+const MODELS = ["eleven_flash_v2_5", "eleven_turbo_v2_5", "eleven_multilingual_v2"];
 
 function limited(request: Request): boolean {
   const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "local";
@@ -19,7 +20,7 @@ function limited(request: Request): boolean {
     return false;
   }
   row.count += 1;
-  return row.count > 16;
+  return row.count > 24;
 }
 
 function headers(key: string): HeadersInit {
@@ -27,9 +28,9 @@ function headers(key: string): HeadersInit {
 }
 
 async function waitForAudio(key: string, id: string): Promise<string | null> {
-  const deadline = Date.now() + 48_000;
+  const deadline = Date.now() + 18_000;
   while (Date.now() < deadline) {
-    await new Promise((resolve) => setTimeout(resolve, 1200));
+    await new Promise((resolve) => setTimeout(resolve, 250));
     const detail = await fetch(`${VIBI}/v1/history/${id}`, { headers: { "xi-api-key": key }, cache: "no-store" });
     if (!detail.ok) continue;
     const body = (await detail.json()) as {
@@ -51,7 +52,7 @@ export async function POST(request: Request) {
   let text = "";
   try {
     const body = (await request.json()) as { text?: unknown };
-    text = typeof body.text === "string" ? body.text.trim().slice(0, 800) : "";
+    text = typeof body.text === "string" ? body.text.trim().slice(0, 280) : "";
   } catch {
     text = "";
   }
@@ -61,22 +62,29 @@ export async function POST(request: Request) {
   const voiceId = isVoiceId(settings.voiceId) ? settings.voiceId : "";
   if (!voiceId) return json({ ok: false, message: "معرف الصوت غير صالح." }, 400);
 
-  const created = await fetch(`${VIBI}/v1/text-to-speech/${voiceId}`, {
-    method: "POST",
-    headers: headers(key),
-    body: JSON.stringify({
-      text,
-      model_id: "eleven_multilingual_v2",
-      language_code: "ar",
-      provider: "elevenlabs",
-      voice_settings: { stability: 0.45, similarity_boost: 0.8, speed: 1 },
-    }),
-  });
-  if (!created.ok) return json({ ok: false, message: "تعذر تشغيل صوت المساعدة." }, 502);
-  const task = (await created.json()) as { id?: string };
-  if (!task.id) return json({ ok: false, message: "تعذر تشغيل صوت المساعدة." }, 502);
+  let taskId = "";
+  for (const model of MODELS) {
+    const created = await fetch(`${VIBI}/v1/text-to-speech/${voiceId}`, {
+      method: "POST",
+      headers: headers(key),
+      body: JSON.stringify({
+        text,
+        model_id: model,
+        language_code: "ar",
+        provider: "elevenlabs",
+        voice_settings: { stability: 0.35, similarity_boost: 0.75, speed: 1.2 },
+      }),
+    });
+    if (!created.ok) continue;
+    const task = (await created.json()) as { id?: string };
+    if (task.id) {
+      taskId = task.id;
+      break;
+    }
+  }
+  if (!taskId) return json({ ok: false, message: "تعذر تشغيل صوت المساعدة." }, 502);
 
-  const audioUrl = await waitForAudio(key, task.id);
+  const audioUrl = await waitForAudio(key, taskId);
   if (!audioUrl) return json({ ok: false, message: "تعذر تشغيل صوت المساعدة." }, 502);
   const audio = await fetch(audioUrl, { headers: { "xi-api-key": key }, cache: "no-store" });
   if (!audio.ok || !audio.body) return json({ ok: false, message: "تعذر تشغيل صوت المساعدة." }, 502);
