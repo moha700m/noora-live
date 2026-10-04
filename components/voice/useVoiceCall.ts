@@ -134,13 +134,13 @@ export function useVoiceCall() {
     const samples = samplesRef.current;
     chunksRef.current = [];
     samplesRef.current = 0;
-    if (samples < 16000 * 0.4) return;
+    if (samples < 16000 * 0.25) return;
     busyRef.current = true;
     dispatch({ type: "THINKING" });
     try {
       const body = new FormData();
       body.set("audio", wavBlob(chunks), "speech.wav");
-      body.set("history", JSON.stringify(historyRef.current.slice(-8)));
+      body.set("history", JSON.stringify(historyRef.current.slice(-4)));
       body.set("mode", modeRef.current);
       const response = await fetch("/api/openai/turn", { method: "POST", body });
       const payload = (await response.json().catch(() => null)) as { ok?: boolean; heard?: string; reply?: string; message?: string } | null;
@@ -154,6 +154,7 @@ export function useVoiceCall() {
       }
       pushLine("assistant", payload.reply, true);
       historyRef.current.push({ role: "assistant", content: payload.reply });
+      speakerRef.current?.setFast(true);
       speakerRef.current?.push(payload.reply, true);
       speakerRef.current?.finish();
       dispatch({ type: "ASSISTANT_SPEAKING" });
@@ -187,7 +188,7 @@ export function useVoiceCall() {
       },
     );
     speakerRef.current = speaker;
-    speaker.setFast(modeRef.current === "solo");
+    speaker.setFast(true);
     const mic = new MicrophoneCapture({
       onLevel: (value) => {
         if (busyRef.current || speakerRef.current?.busy) return;
@@ -197,19 +198,19 @@ export function useVoiceCall() {
         if (value > 0.08) {
           hotFrames.current += 1;
           coolFrames.current = 0;
-          if (hotFrames.current > 2) dispatch({ type: "USER_SPEAKING", active: true });
+          if (hotFrames.current > 1) dispatch({ type: "USER_SPEAKING", active: true });
         } else {
           coolFrames.current += 1;
           hotFrames.current = 0;
-          const wait = modeRef.current === "group" ? 18 : 8;
-          if (coolFrames.current > wait && samplesRef.current > 16000 * 0.4) void flush();
+          const wait = modeRef.current === "group" ? 10 : 3;
+          if (coolFrames.current > wait && samplesRef.current > 16000 * 0.25) void flush();
         }
       },
       onPcm: (pcm) => {
         if (micMutedRef.current || busyRef.current || speakerRef.current?.busy) return;
         chunksRef.current.push(pcm);
         samplesRef.current += pcm.length;
-        if (samplesRef.current > 16000 * 20) void flush();
+        if (samplesRef.current > 16000 * 8) void flush();
       },
     });
     micRef.current = mic;
