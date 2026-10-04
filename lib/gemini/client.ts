@@ -64,6 +64,7 @@ export class GeminiLiveClient {
   private handle: string | null = null;
   private stopped = true;
   private ready = false;
+  private sawSetup = false;
   private attempt = 0;
   private timer: ReturnType<typeof setTimeout> | null = null;
   private instruction = SYSTEM_INSTRUCTION;
@@ -79,6 +80,7 @@ export class GeminiLiveClient {
   async start(mode: ListenMode = "group"): Promise<boolean> {
     this.mode = mode;
     this.stopped = false;
+    this.sawSetup = false;
     this.attempt = 0;
     return this.open(false);
   }
@@ -114,6 +116,13 @@ export class GeminiLiveClient {
     this.timer = null;
   }
 
+  private fail(message: string): void {
+    this.stopped = true;
+    this.ready = false;
+    this.handlers.onError(message);
+    this.handlers.onStatus("failed");
+  }
+
   private async open(isReconnect: boolean): Promise<boolean> {
     if (this.stopped) return false;
     const generation = ++this.generation;
@@ -140,7 +149,7 @@ export class GeminiLiveClient {
       });
       const live = await ai.live.connect({
         model: MODEL_NAME,
-        config: clientLiveConfig(this.handle, this.instruction, this.mode),
+        config: clientLiveConfig(isReconnect ? this.handle : null, this.instruction, this.mode),
         callbacks: {
           onopen: () => {
             /* setupComplete is the real ready signal */
@@ -157,6 +166,10 @@ export class GeminiLiveClient {
             if (generation !== this.generation || this.stopped) return;
             this.ready = false;
             this.session = null;
+            if (!this.sawSetup) {
+              this.fail(MSG.dropped);
+              return;
+            }
             this.scheduleRetry();
           },
         },
@@ -176,9 +189,11 @@ export class GeminiLiveClient {
       if (this.stopped || generation !== this.generation) return false;
       const code = typeof error === "object" && error && "code" in error ? String(error.code) : "";
       if (code === "not_configured" || code === "forbidden" || code === "rate_limited") {
-        this.stopped = true;
-        this.handlers.onError(error instanceof Error ? error.message : tokenErrorMessage(code));
-        this.handlers.onStatus("failed");
+        this.fail(error instanceof Error ? error.message : tokenErrorMessage(code));
+        return false;
+      }
+      if (!this.sawSetup) {
+        this.fail(error instanceof Error ? error.message : MSG.connectFailed);
         return false;
       }
       this.scheduleRetry();
@@ -189,6 +204,7 @@ export class GeminiLiveClient {
   private onMessage(message: LiveServerMessage): void {
     if (message.setupComplete) {
       this.ready = true;
+      this.sawSetup = true;
       this.attempt = 0;
       this.handlers.onStatus("ready");
     }
@@ -243,9 +259,7 @@ export class GeminiLiveClient {
     this.ready = false;
     if (!proactive) this.attempt += 1;
     if (this.attempt > MAX_RECONNECT_ATTEMPTS) {
-      this.stopped = true;
-      this.handlers.onError(MSG.dropped);
-      this.handlers.onStatus("failed");
+      this.fail(MSG.dropped);
       return;
     }
     this.handlers.onStatus("reconnecting");
