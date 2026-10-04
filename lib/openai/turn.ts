@@ -2,7 +2,7 @@ import { composeInstruction, type ListenMode } from "../settings/model";
 import { loadSettings } from "../settings/store";
 import { MSG } from "../utils/messages";
 
-const CHAT_MODELS = ["gpt-4.1", "gpt-4o", "gpt-4.1-mini"];
+const CHAT_MODELS = ["gpt-5.4", "gpt-5.5", "gpt-4.1"];
 const TRANSCRIBE_MODELS = ["gpt-4o-mini-transcribe", "whisper-1"];
 
 export type TurnMessage = { role: "user" | "assistant"; content: string };
@@ -47,9 +47,9 @@ async function reply(instruction: string, history: TurnMessage[], heard: string)
   const messages = [
     {
       role: "system",
-      content: `${instruction}\n\nالمتكلم خلص كلامه. لا تقاطعه ولا تكمّل جملته.\nافهم المقصود الحقيقي، مو أول كلمة. إذا الكلام ناقص أو مو واضح، اسأل سؤال واحد قصير بدل ما تخمّن.\nالرد صوتي: جملتين أو ثلاث إذا الموقف يبي شرح، وفيها ملاحظة كود دقيقة إذا السؤال عن اللعب. بدون مقدمة وبدون تفكير ظاهر.`,
+      content: `${instruction}\n\nالمتكلم خلص. لا تقاطعه.\nاقرأ الموقف قبل الرد: وش الغلطة الفعلية، وش السبب، وش الحل الواحد اللي يفرق الحين.\nلا تعطي كلام عام مثل اهد أو ركز إذا تقدر تحدد المكان أو التوقيت أو السلاح أو زاوية النظر.\nإذا الكلام ناقص، اسأل سؤال واحد يكشف الموقف. لا تخمّن تحديثًا ما تعرفه.\nالرد صوتي وذكي: جملتين إلى أربع، فيها قراءة وحل. الطقطقة بعد الفائدة، مو بدلها. بدون مقدمة وبدون تفكير ظاهر.`,
     },
-    ...history.slice(-8),
+    ...history.slice(-10),
     { role: "user", content: heard },
   ];
   let last = "";
@@ -58,8 +58,8 @@ async function reply(instruction: string, history: TurnMessage[], heard: string)
       "/v1/chat/completions",
       JSON.stringify({
         model,
-        temperature: 0.6,
-        max_tokens: 220,
+        temperature: 0.5,
+        max_tokens: 320,
         messages,
       }),
       "application/json",
