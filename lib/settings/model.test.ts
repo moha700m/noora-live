@@ -3,14 +3,13 @@ import test from "node:test";
 import { takeSpeakable } from "../audio/phrases.ts";
 import { composeInstruction, DEFAULT_VOICE_ID, normalizeSettings } from "./model.ts";
 
-test("settings keep the elevenlabs voice and compose the three fields", () => {
-  const settings = normalizeSettings({ hook: "نورة", dialect: "سعودي", system: "مختصر", voiceId: "qdCWAGl7lBhHi8DaA3b0" });
+test("settings keep the vibi voice and compose the three fields", () => {
+  const settings = normalizeSettings({ hook: "نورة", dialect: "سعودي", system: "مختصر", voiceId: "rpGHcNQJvO8dFNNFNj1v" });
   assert.equal(settings.voiceId, DEFAULT_VOICE_ID);
   const instruction = composeInstruction(settings);
   assert.match(instruction, /الهوية/);
   assert.match(instruction, /اللهجة/);
   assert.match(instruction, /النظام/);
-  assert.match(composeInstruction(settings), /وضع الشخص الواحد/);
   assert.match(composeInstruction(settings), /وضع الشخص الواحد/);
   assert.match(composeInstruction(settings, "group"), /وضع المجموعة/);
   assert.equal(normalizeSettings({ voiceId: "bad" }).voiceId, DEFAULT_VOICE_ID);

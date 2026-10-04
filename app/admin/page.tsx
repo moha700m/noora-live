@@ -7,6 +7,7 @@ import { voiceIdError } from "../../lib/settings/model";
 type Desk = {
   settings: AssistantSettings;
   elevenLabs: boolean;
+  vibi?: boolean;
   canSave: boolean;
 };
 
@@ -83,6 +84,8 @@ export default function AdminPage() {
     setDesk((current) => (current ? { ...current, settings: { ...current.settings, [key]: value } } : current));
   }
 
+  const voiceReady = Boolean(desk?.vibi || desk?.elevenLabs);
+
   return (
     <main className="call-shell">
       <div className="mx-auto flex min-h-dvh w-full max-w-lg flex-col gap-6 px-5 py-8">
@@ -114,7 +117,7 @@ export default function AdminPage() {
         {desk && authed ? (
           <form className="flex flex-col gap-4" onSubmit={(event) => void save(event)}>
             <label className="flex flex-col gap-2 rounded-3xl border border-teal/40 bg-teal/10 p-4 text-sm text-muted">
-              رمز صوت ElevenLabs
+              رمز صوت Vibi
               <input
                 dir="ltr"
                 inputMode="text"
@@ -126,15 +129,15 @@ export default function AdminPage() {
                 className="rounded-2xl border border-fg/15 bg-bg px-4 py-3 text-left font-mono text-base tracking-wide text-fg"
               />
               <span>الصوت الحالي للمكالمة: {desk.settings.voiceId.trim() || "غير محدد"}</span>
-              <span>الموديل: Eleven v3 Conversational، نبرة مكالمة احترافية.</span>
+              <span>الموديل: eleven_multilingual_v2، عربي، عبر api.vibi.pro.</span>
             </label>
             <Field label="الهوك" value={desk.settings.hook} onChange={(value) => patch("hook", value)} />
             <Field label="اللهجة" value={desk.settings.dialect} onChange={(value) => patch("dialect", value)} />
             <Field label="النظام" value={desk.settings.system} onChange={(value) => patch("system", value)} />
             <p className="text-sm text-muted">
-              {desk.elevenLabs
-                ? "صوت ElevenLabs مفعّل في هذا النشر."
-                : "أضف ELEVENLABS_API_KEY ثم أعد النشر حتى يشتغل هذا الصوت. إلى ذلك الحين المكالمة تبقى بصوت Gemini."}
+              {voiceReady
+                ? "صوت Vibi مفعّل في هذا النشر."
+                : "أضف VIBI_API_KEY ثم أعد النشر حتى يشتغل هذا الصوت. إلى ذلك الحين المكالمة تبقى بصوت Gemini."}
             </p>
             {!desk.canSave ? (
               <p className="text-sm text-muted">لحفظ التعديلات أضف SETTINGS_GITHUB_TOKEN ثم أعد النشر.</p>

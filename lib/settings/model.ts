@@ -1,4 +1,4 @@
-export const DEFAULT_VOICE_ID = "qdCWAGl7lBhHi8DaA3b0";
+export const DEFAULT_VOICE_ID = "rpGHcNQJvO8dFNNFNj1v";
 
 export type VoiceEngine = "gemini" | "elevenlabs";
 

@@ -113,6 +113,32 @@ export class PhraseSpeaker {
       this.failOnce();
       return;
     }
+    const type = response.headers.get("content-type") || "";
+    if (type.includes("mpeg") || type.includes("audio")) {
+      try {
+        const bytes = await response.arrayBuffer();
+        if (generation !== this.generation) return;
+        const ctx = new AudioContext();
+        try {
+          const audio = await ctx.decodeAudioData(bytes.slice(0));
+          const channel = audio.getChannelData(0);
+          const pcm = new Int16Array(channel.length);
+          for (let i = 0; i < channel.length; i += 1) {
+            const sample = Math.max(-1, Math.min(1, channel[i] ?? 0));
+            pcm[i] = sample < 0 ? sample * 0x8000 : sample * 0x7fff;
+          }
+          if (generation === this.generation) {
+            this.play.enqueue(pcm, audio.sampleRate);
+            this.onActive();
+          }
+        } finally {
+          await ctx.close();
+        }
+      } catch {
+        if (generation === this.generation && !controller.signal.aborted) this.failOnce();
+      }
+      return;
+    }
     const reader = response.body.getReader();
     let odd = new Uint8Array(0);
     try {

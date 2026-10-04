@@ -5,8 +5,10 @@ import { loadSettings } from "../../../../lib/settings/store";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+export const maxDuration = 60;
 
 const hits = new Map<string, { count: number; reset: number }>();
+const VIBI = "https://api.vibi.pro";
 
 function limited(request: Request): boolean {
   const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "local";
@@ -17,23 +19,39 @@ function limited(request: Request): boolean {
     return false;
   }
   row.count += 1;
-  return row.count > 40;
+  return row.count > 16;
 }
 
-const MODEL_ID = "eleven_v3_conversational";
+function headers(key: string): HeadersInit {
+  return { "xi-api-key": key, "content-type": "application/json" };
+}
+
+async function waitForAudio(key: string, id: string): Promise<string | null> {
+  const deadline = Date.now() + 48_000;
+  while (Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 1200));
+    const detail = await fetch(`${VIBI}/v1/history/${id}`, { headers: { "xi-api-key": key }, cache: "no-store" });
+    if (!detail.ok) continue;
+    const body = (await detail.json()) as {
+      status?: string;
+      result?: { audio_url?: string };
+    };
+    if (body.status === "failed") return null;
+    if (body.status === "completed" && body.result?.audio_url) return body.result.audio_url;
+  }
+  return null;
+}
 
 export async function POST(request: Request) {
   if (!isAllowedTokenRequest(request)) return json({ ok: false, message: "غير مسموح." }, 403);
   if (limited(request)) return json({ ok: false, message: "محاولات كثيرة." }, 429);
-  const key = process.env.ELEVENLABS_API_KEY?.trim();
-  if (!key) return json({ ok: false, message: "صوت ElevenLabs غير مفعّل بعد." }, 503);
+  const key = process.env.VIBI_API_KEY?.trim();
+  if (!key) return json({ ok: false, message: "صوت Vibi غير مفعّل بعد." }, 503);
 
   let text = "";
-  let previousText = "";
   try {
-    const body = (await request.json()) as { text?: unknown; previousText?: unknown };
+    const body = (await request.json()) as { text?: unknown };
     text = typeof body.text === "string" ? body.text.trim().slice(0, 800) : "";
-    previousText = typeof body.previousText === "string" ? body.previousText.trim().slice(-100) : "";
   } catch {
     text = "";
   }
@@ -43,32 +61,30 @@ export async function POST(request: Request) {
   const voiceId = isVoiceId(settings.voiceId) ? settings.voiceId : "";
   if (!voiceId) return json({ ok: false, message: "معرف الصوت غير صالح." }, 400);
 
-  const upstream = await fetch(
-    "https://api.elevenlabs.io/v1/text-to-dialogue/stream?output_format=pcm_24000",
-    {
-      method: "POST",
-      headers: {
-        "xi-api-key": key,
-        "content-type": "application/json",
-        accept: "application/octet-stream",
-      },
-      body: JSON.stringify({
-        inputs: [{ text, voice_id: voiceId }],
-        model_id: MODEL_ID,
-        language_code: "ar",
-        settings: previousText ? { previous_text: previousText } : undefined,
-      }),
-    },
-  );
-  if (!upstream.ok || !upstream.body) {
-    return json({ ok: false, message: "تعذر تشغيل صوت المساعدة." }, 502);
-  }
-  return new Response(upstream.body, {
+  const created = await fetch(`${VIBI}/v1/text-to-speech/${voiceId}`, {
+    method: "POST",
+    headers: headers(key),
+    body: JSON.stringify({
+      text,
+      model_id: "eleven_multilingual_v2",
+      language_code: "ar",
+      provider: "elevenlabs",
+      voice_settings: { stability: 0.45, similarity_boost: 0.8, speed: 1 },
+    }),
+  });
+  if (!created.ok) return json({ ok: false, message: "تعذر تشغيل صوت المساعدة." }, 502);
+  const task = (await created.json()) as { id?: string };
+  if (!task.id) return json({ ok: false, message: "تعذر تشغيل صوت المساعدة." }, 502);
+
+  const audioUrl = await waitForAudio(key, task.id);
+  if (!audioUrl) return json({ ok: false, message: "تعذر تشغيل صوت المساعدة." }, 502);
+  const audio = await fetch(audioUrl, { headers: { "xi-api-key": key }, cache: "no-store" });
+  if (!audio.ok || !audio.body) return json({ ok: false, message: "تعذر تشغيل صوت المساعدة." }, 502);
+  return new Response(audio.body, {
     status: 200,
     headers: {
-      "content-type": "application/octet-stream",
+      "content-type": audio.headers.get("content-type") || "audio/mpeg",
       "cache-control": "no-store",
-      "x-audio-rate": "24000",
     },
   });
 }

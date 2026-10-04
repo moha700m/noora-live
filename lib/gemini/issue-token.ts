@@ -78,7 +78,7 @@ export async function handleTokenRequest(request: Request): Promise<Response> {
     mode = "group";
   }
   const instruction = composeInstruction(settings, mode);
-  const engine = process.env.ELEVENLABS_API_KEY?.trim() ? "elevenlabs" : "gemini";
+  const engine = process.env.VIBI_API_KEY?.trim() ? "elevenlabs" : "gemini";
 
   try {
     const ai = new GoogleGenAI({

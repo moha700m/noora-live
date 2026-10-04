@@ -18,7 +18,8 @@ export async function GET(request: Request) {
     {
       ok: true,
       settings,
-      elevenLabs: Boolean(process.env.ELEVENLABS_API_KEY?.trim()),
+      elevenLabs: Boolean(process.env.VIBI_API_KEY?.trim()),
+      vibi: Boolean(process.env.VIBI_API_KEY?.trim()),
       canSave: canSaveSettings(),
     },
     200,

@@ -19,7 +19,7 @@ export function VoiceCall() {
     <main className="call-shell">
       <div className="mx-auto flex min-h-dvh w-full max-w-md flex-col items-center justify-between px-6 py-10">
         <p className="text-xs text-muted">
-          يعمل بواسطة Gemini Live · <a className="text-teal" href="/admin">الإدارة</a>
+          صوت نورة · Vibi · <a className="text-teal" href="/admin">الإدارة</a>
         </p>
 
         <div className="flex w-full flex-col items-center gap-6">
