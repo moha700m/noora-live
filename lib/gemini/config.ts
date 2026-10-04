@@ -1,8 +1,8 @@
 import { ActivityHandling, EndSensitivity, Modality, StartSensitivity, type LiveConnectConfig } from "@google/genai";
 import { composeInstruction, DEFAULT_SETTINGS, type ListenMode } from "../settings/model";
 
-export const APP_NAME = "سايبر";
-export const ASSISTANT_NAME = "سايبر";
+export const APP_NAME = "بو نايف";
+export const ASSISTANT_NAME = "بو نايف";
 
 export const MODEL_NAME = "gemini-3.8-live";
 export const VOICE_NAME = "Aoede";

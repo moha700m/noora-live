@@ -3,8 +3,8 @@ import type { ReactNode } from "react";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "سايبر | مكالمة صوتية",
-  description: "تحدث مباشرة مع سايبر من المتصفح.",
+  title: "بو نايف | مكالمة صوتية",
+  description: "بو نايف، لاعب كود سعودي، تسولف معه من المتصفح.",
   icons: { icon: "/favicon.svg" },
 };
 

@@ -46,7 +46,7 @@ async function reply(instruction: string, history: TurnMessage[], heard: string)
   const messages = [
     {
       role: "system",
-      content: `${instruction}\n\nالرد مكالمة سريعة. جملة واحدة قصيرة، أقل من عشر كلمات. بدون مقدمة.`,
+      content: `${instruction}\n\nالرد الحين صوتي وسريع. جملة إلى ثلاث جمل فقط. بدون مقدمة وبدون تفكير ظاهر.`,
     },
     ...history.slice(-4),
     { role: "user", content: heard },
@@ -57,8 +57,8 @@ async function reply(instruction: string, history: TurnMessage[], heard: string)
       "/v1/chat/completions",
       JSON.stringify({
         model,
-        temperature: 0.4,
-        max_tokens: 70,
+        temperature: 0.7,
+        max_tokens: 120,
         messages,
       }),
       "application/json",
