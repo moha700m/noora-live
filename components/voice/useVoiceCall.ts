@@ -102,7 +102,6 @@ export function useVoiceCall() {
       onStatus: (status) => {
         if (status === "ready") dispatch({ type: "LIVE" });
         if (status === "reconnecting") dispatch({ type: "RECONNECTING" });
-        if (status === "failed") dispatch({ type: "FAIL", message: MSG.dropped });
       },
       onAudio: (pcm, sampleRate) => {
         if (engineRef.current === "elevenlabs") return;
