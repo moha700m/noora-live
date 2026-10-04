@@ -1,14 +1,14 @@
+"use client";
+
 import { useCallback, useEffect, useRef, useState } from "react";
-import { GeminiLiveClient } from "../../lib/gemini/client";
 import { MicrophoneCapture } from "../../lib/audio/microphone";
 import { PcmPlayback } from "../../lib/audio/playback";
-import { pcm16ToBase64 } from "../../lib/audio/pcm";
 import { applyTranscript } from "../../lib/audio/transcript";
 import { formatDuration, initialCallState, isInCall, reduceCall, statusLabel } from "../../lib/call/machine";
 import type { CallState } from "../../lib/call/machine";
 import type { TranscriptLine } from "../../lib/gemini/types";
 import { PhraseSpeaker } from "../../lib/audio/speaker";
-import type { ListenMode, VoiceEngine } from "../../lib/settings/model";
+import type { ListenMode } from "../../lib/settings/model";
 import { MSG, micErrorMessage } from "../../lib/utils/messages";
 
 function supported(): boolean {
@@ -19,6 +19,36 @@ function supported(): boolean {
     typeof AudioContext !== "undefined" &&
     typeof AudioWorkletNode !== "undefined"
   );
+}
+
+function wavBlob(chunks: Int16Array[], rate = 16000): Blob {
+  const length = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
+  const pcm = new Int16Array(length);
+  let offset = 0;
+  for (const chunk of chunks) {
+    pcm.set(chunk, offset);
+    offset += chunk.length;
+  }
+  const header = new ArrayBuffer(44);
+  const view = new DataView(header);
+  const bytes = pcm.length * 2;
+  const write = (at: number, text: string) => {
+    for (let i = 0; i < text.length; i += 1) view.setUint8(at + i, text.charCodeAt(i));
+  };
+  write(0, "RIFF");
+  view.setUint32(4, 36 + bytes, true);
+  write(8, "WAVE");
+  write(12, "fmt ");
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, 1, true);
+  view.setUint32(24, rate, true);
+  view.setUint32(28, rate * 2, true);
+  view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true);
+  write(36, "data");
+  view.setUint32(40, bytes, true);
+  return new Blob([header, pcm], { type: "audio/wav" });
 }
 
 export function useVoiceCall() {
@@ -32,20 +62,22 @@ export function useVoiceCall() {
   const stateRef = useRef(state);
   stateRef.current = state;
   const lineSeq = useRef(0);
-  const clientRef = useRef<GeminiLiveClient | null>(null);
   const micRef = useRef<MicrophoneCapture | null>(null);
   const playRef = useRef<PcmPlayback | null>(null);
   const speakerRef = useRef<PhraseSpeaker | null>(null);
-  const [mode, setMode] = useState<ListenMode>("group");
-  const modeRef = useRef<ListenMode>("group");
+  const [mode, setMode] = useState<ListenMode>("solo");
+  const modeRef = useRef<ListenMode>("solo");
   modeRef.current = mode;
-  const engineRef = useRef<VoiceEngine>("gemini");
   const audioRef = useRef<AudioContext | null>(null);
   const micMutedRef = useRef(false);
   const hotFrames = useRef(0);
   const coolFrames = useRef(0);
   const startedAt = useRef<number | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const chunksRef = useRef<Int16Array[]>([]);
+  const samplesRef = useRef(0);
+  const busyRef = useRef(false);
+  const historyRef = useRef<{ role: "user" | "assistant"; content: string }[]>([]);
 
   const dispatch = useCallback((event: Parameters<typeof reduceCall>[1]) => {
     setState((current) => {
@@ -86,75 +118,60 @@ export function useVoiceCall() {
 
   const endCall = useCallback(async () => {
     dispatch({ type: "END" });
-    clientRef.current?.stop(true);
-    clientRef.current = null;
     stopTimer();
     startedAt.current = null;
+    chunksRef.current = [];
+    samplesRef.current = 0;
     await releaseAudio();
     setLevel(0);
     setLevelSource("idle");
     dispatch({ type: "ENDED" });
   }, [dispatch, releaseAudio]);
 
-  const ensureClient = useCallback(() => {
-    if (clientRef.current) return clientRef.current;
-    const client = new GeminiLiveClient({
-      onStatus: (status) => {
-        if (status === "ready") dispatch({ type: "LIVE" });
-        if (status === "reconnecting") dispatch({ type: "RECONNECTING" });
-      },
-      onAudio: (pcm, sampleRate) => {
-        if (engineRef.current === "elevenlabs") return;
-        playRef.current?.enqueue(pcm, sampleRate);
-        dispatch({ type: "ASSISTANT_SPEAKING" });
-        setLevelSource("assistant");
-      },
-      onInterrupted: () => {
-        if (modeRef.current === "group") return;
-        speakerRef.current?.clear();
-        playRef.current?.clear();
-        dispatch({ type: "USER_SPEAKING", active: true });
-        setLevelSource("user");
-      },
-      onInputTranscript: (text, finished) => {
-        pushLine("user", text, finished);
-        if (text.trim()) dispatch({ type: "USER_SPEAKING", active: true });
-        if (finished) dispatch({ type: "THINKING" });
-      },
-      onOutputTranscript: (text, finished) => {
-        pushLine("assistant", text, finished);
-        if (engineRef.current === "elevenlabs") speakerRef.current?.push(text, finished);
-      },
-      onUserActivity: (active) => {
-        dispatch({ type: "USER_SPEAKING", active });
-        if (!active) dispatch({ type: "THINKING" });
-      },
-      onTurnComplete: () => {
-        if (engineRef.current === "elevenlabs") speakerRef.current?.finish();
-        if (!playRef.current?.pending && !speakerRef.current?.busy) dispatch({ type: "LISTENING" });
-      },
-      onSession: (info) => {
-        engineRef.current = info.engine;
-      },
-      onError: (message) => {
-        dispatch({ type: "FAIL", message });
-      },
-    });
-    clientRef.current = client;
-    return client;
+  const flush = useCallback(async () => {
+    if (busyRef.current || micMutedRef.current) return;
+    const chunks = chunksRef.current;
+    const samples = samplesRef.current;
+    chunksRef.current = [];
+    samplesRef.current = 0;
+    if (samples < 16000 * 0.4) return;
+    busyRef.current = true;
+    dispatch({ type: "THINKING" });
+    try {
+      const body = new FormData();
+      body.set("audio", wavBlob(chunks), "speech.wav");
+      body.set("history", JSON.stringify(historyRef.current.slice(-8)));
+      body.set("mode", modeRef.current);
+      const response = await fetch("/api/openai/turn", { method: "POST", body });
+      const payload = (await response.json().catch(() => null)) as { ok?: boolean; heard?: string; reply?: string; message?: string } | null;
+      if (!response.ok || !payload?.ok || !payload.reply) {
+        dispatch({ type: "FAIL", message: payload?.message || MSG.connectFailed });
+        return;
+      }
+      if (payload.heard) {
+        pushLine("user", payload.heard, true);
+        historyRef.current.push({ role: "user", content: payload.heard });
+      }
+      pushLine("assistant", payload.reply, true);
+      historyRef.current.push({ role: "assistant", content: payload.reply });
+      speakerRef.current?.push(payload.reply, true);
+      speakerRef.current?.finish();
+      dispatch({ type: "ASSISTANT_SPEAKING" });
+      setLevelSource("assistant");
+    } catch {
+      dispatch({ type: "FAIL", message: MSG.connectFailed });
+    } finally {
+      busyRef.current = false;
+    }
   }, [dispatch, pushLine]);
 
   const beginSession = useCallback(async () => {
     if (!supported()) {
-      dispatch({
-        type: "FAIL",
-        message: window.isSecureContext ? MSG.unsupported : MSG.insecure,
-      });
+      dispatch({ type: "FAIL", message: window.isSecureContext ? MSG.unsupported : MSG.insecure });
       return;
     }
     dispatch({ type: "START" });
-    const AudioCtor = window.AudioContext;
-    const context = new AudioCtor();
+    const context = new AudioContext();
     audioRef.current = context;
     void context.resume();
     const playback = new PcmPlayback(context);
@@ -166,37 +183,36 @@ export function useVoiceCall() {
         setLevelSource("assistant");
       },
       () => {
-        /* synthesis failure should not end the live session */
+        /* voice failure should not kill the call */
       },
     );
     speakerRef.current = speaker;
     speaker.setFast(modeRef.current === "solo");
-
     const mic = new MicrophoneCapture({
       onLevel: (value) => {
-        if (stateRef.current.phase === "assistant_speaking" && playRef.current?.pending) return;
+        if (busyRef.current || speakerRef.current?.busy) return;
         setLevel(value);
         setLevelSource("user");
         if (micMutedRef.current) return;
-        if (value > 0.12) {
+        if (value > 0.08) {
           hotFrames.current += 1;
           coolFrames.current = 0;
           if (hotFrames.current > 2) dispatch({ type: "USER_SPEAKING", active: true });
         } else {
           coolFrames.current += 1;
           hotFrames.current = 0;
-          if (coolFrames.current > 8 && stateRef.current.phase === "user_speaking") {
-            dispatch({ type: "LISTENING" });
-          }
+          const wait = modeRef.current === "group" ? 18 : 8;
+          if (coolFrames.current > wait && samplesRef.current > 16000 * 0.4) void flush();
         }
       },
       onPcm: (pcm) => {
-        if (micMutedRef.current || !clientRef.current?.isReady) return;
-        clientRef.current.sendAudio(pcm16ToBase64(pcm));
+        if (micMutedRef.current || busyRef.current || speakerRef.current?.busy) return;
+        chunksRef.current.push(pcm);
+        samplesRef.current += pcm.length;
+        if (samplesRef.current > 16000 * 20) void flush();
       },
     });
     micRef.current = mic;
-
     try {
       await mic.start(context);
     } catch (error) {
@@ -204,36 +220,22 @@ export function useVoiceCall() {
       dispatch({ type: "FAIL", message: micErrorMessage(error, window.isSecureContext) });
       return;
     }
-
     dispatch({ type: "PERMISSION_GRANTED" });
+    dispatch({ type: "LIVE" });
     mic.setSending(true);
-    const opened = await ensureClient().start(modeRef.current);
-    if (!opened) return;
     if (!startedAt.current) {
-        startedAt.current = Date.now();
-        stopTimer();
-        timerRef.current = setInterval(() => {
-          if (!startedAt.current) return;
-          setSeconds(Math.floor((Date.now() - startedAt.current) / 1000));
-        }, 250);
+      startedAt.current = Date.now();
+      stopTimer();
+      timerRef.current = setInterval(() => {
+        if (!startedAt.current) return;
+        setSeconds(Math.floor((Date.now() - startedAt.current) / 1000));
+      }, 250);
     }
-  }, [dispatch, ensureClient, releaseAudio]);
+  }, [dispatch, flush, releaseAudio]);
 
   const retry = useCallback(async () => {
-    clientRef.current?.stop(false);
-    clientRef.current = null;
-    if (!audioRef.current) {
-      await beginSession();
-      return;
-    }
-    dispatch({ type: "RECONNECTING" });
-    speakerRef.current?.setFast(modeRef.current === "solo");
-    try {
-      await ensureClient().start(modeRef.current);
-    } catch {
-      dispatch({ type: "FAIL", message: MSG.dropped });
-    }
-  }, [beginSession, dispatch, ensureClient]);
+    await beginSession();
+  }, [beginSession]);
 
   const toggleMic = useCallback(() => {
     const nextMuted = !micMutedRef.current;
@@ -252,26 +254,14 @@ export function useVoiceCall() {
     const onVis = () => {
       if (document.visibilityState === "visible") void audioRef.current?.resume();
     };
-    const onOffline = () => {
-      if (stateRef.current.wasLive) dispatch({ type: "RECONNECTING" });
-    };
-    const onOnline = () => {
-      if (stateRef.current.phase === "reconnecting") void retry();
-    };
     document.addEventListener("visibilitychange", onVis);
-    window.addEventListener("offline", onOffline);
-    window.addEventListener("online", onOnline);
     let frame = 0;
     const tick = () => {
       const output = playRef.current?.getLevel() ?? 0;
       if (output > 0.02 && stateRef.current.phase === "assistant_speaking") {
         setLevel(output);
         setLevelSource("assistant");
-      } else if (
-        !playRef.current?.pending &&
-        !speakerRef.current?.busy &&
-        stateRef.current.phase === "assistant_speaking"
-      ) {
+      } else if (!playRef.current?.pending && !speakerRef.current?.busy && stateRef.current.phase === "assistant_speaking") {
         dispatch({ type: "LISTENING" });
       }
       frame = requestAnimationFrame(tick);
@@ -280,14 +270,11 @@ export function useVoiceCall() {
     return () => {
       cancelAnimationFrame(frame);
       document.removeEventListener("visibilitychange", onVis);
-      window.removeEventListener("offline", onOffline);
-      window.removeEventListener("online", onOnline);
     };
-  }, [dispatch, retry]);
+  }, [dispatch]);
 
   useEffect(() => {
     return () => {
-      clientRef.current?.stop(true);
       speakerRef.current?.clear();
       micRef.current?.stop();
       void playRef.current?.close();
