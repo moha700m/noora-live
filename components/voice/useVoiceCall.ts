@@ -83,6 +83,7 @@ export function useVoiceCall() {
   const lastVoiceAt = useRef(0);
   const sessionRef = useRef(0);
   const abortRef = useRef<AbortController | null>(null);
+  const lastReplyRef = useRef("");
 
   const dispatch = useCallback((event: Parameters<typeof reduceCall>[1]) => {
     setState((current) => {
@@ -104,17 +105,20 @@ export function useVoiceCall() {
   };
 
   const releaseAudio = useCallback(async () => {
-    micRef.current?.stop();
+    const mic = micRef.current;
+    const speaker = speakerRef.current;
+    const playback = playRef.current;
+    const context = audioRef.current;
     micRef.current = null;
-    speakerRef.current?.clear();
     speakerRef.current = null;
-    await playRef.current?.close();
     playRef.current = null;
-    const ctx = audioRef.current;
     audioRef.current = null;
-    if (ctx && ctx.state !== "closed") {
+    mic?.stop();
+    speaker?.clear();
+    await playback?.close();
+    if (context && context.state !== "closed") {
       try {
-        await ctx.close();
+        await context.close();
       } catch {
         /* ignore */
       }
@@ -123,6 +127,7 @@ export function useVoiceCall() {
 
   const endCall = useCallback(async () => {
     sessionRef.current += 1;
+    const session = sessionRef.current;
     abortRef.current?.abort();
     abortRef.current = null;
     busyRef.current = false;
@@ -132,6 +137,7 @@ export function useVoiceCall() {
     startedAt.current = null;
     setVoiceError(null);
     await releaseAudio();
+    if (session !== sessionRef.current) return;
     setLevel(0);
     setLevelSource("idle");
     dispatch({ type: "ENDED" });
@@ -168,12 +174,11 @@ export function useVoiceCall() {
       }
       pushLine("assistant", payload.reply, true);
       historyRef.current.push({ role: "assistant", content: payload.reply });
+      lastReplyRef.current = payload.reply;
       setVoiceError(null);
       speakerRef.current?.setFast(true);
       speakerRef.current?.push(payload.reply, true);
       speakerRef.current?.finish();
-      dispatch({ type: "ASSISTANT_SPEAKING" });
-      setLevelSource("assistant");
     } catch (error) {
       if (session !== sessionRef.current || (error instanceof DOMException && error.name === "AbortError")) return;
       dispatch({ type: "FAIL", message: MSG.connectFailed });
@@ -188,28 +193,48 @@ export function useVoiceCall() {
       return;
     }
     sessionRef.current += 1;
+    const session = sessionRef.current;
     abortRef.current?.abort();
     abortRef.current = null;
     busyRef.current = false;
     bufferRef.current.reset();
     voiceSince.current = null;
     lastVoiceAt.current = 0;
+    lastReplyRef.current = "";
     setVoiceError(null);
-    await releaseAudio();
+    const cleanup = releaseAudio();
     dispatch({ type: "START" });
-    const context = new AudioContext();
-    audioRef.current = context;
-    await context.resume();
+    let context: AudioContext;
+    try {
+      context = new AudioContext();
+    } catch {
+      await cleanup;
+      if (session === sessionRef.current) dispatch({ type: "FAIL", message: MSG.unsupported });
+      return;
+    }
     const playback = new PcmPlayback(context);
+    audioRef.current = context;
     playRef.current = playback;
+    const resumed = playback.resume();
+    await cleanup;
+    if (session !== sessionRef.current) return;
+    if (!(await resumed)) {
+      if (session !== sessionRef.current) return;
+      await releaseAudio();
+      if (session === sessionRef.current) dispatch({ type: "FAIL", message: "تعذر تشغيل الصوت. حاول بدء المكالمة مرة ثانية." });
+      return;
+    }
+    if (session !== sessionRef.current) return;
     const speaker = new PhraseSpeaker(
       playback,
       () => {
+        if (session !== sessionRef.current) return;
         setVoiceError(null);
         dispatch({ type: "ASSISTANT_SPEAKING" });
         setLevelSource("assistant");
       },
       () => {
+        if (session !== sessionRef.current) return;
         setVoiceError("تعذر تشغيل الصوت. المكالمة مستمرة، تقدر تتكلم.");
         dispatch({ type: "LISTENING" });
       },
@@ -251,10 +276,12 @@ export function useVoiceCall() {
     try {
       await mic.start(context);
     } catch (error) {
+      if (session !== sessionRef.current) return;
       await releaseAudio();
-      dispatch({ type: "FAIL", message: micErrorMessage(error, window.isSecureContext) });
+      if (session === sessionRef.current) dispatch({ type: "FAIL", message: micErrorMessage(error, window.isSecureContext) });
       return;
     }
+    if (session !== sessionRef.current) return;
     dispatch({ type: "PERMISSION_GRANTED" });
     dispatch({ type: "LIVE" });
     mic.setSending(true);
@@ -271,6 +298,26 @@ export function useVoiceCall() {
   const retry = useCallback(async () => {
     await beginSession();
   }, [beginSession]);
+
+  const retryAudio = useCallback(async () => {
+    const session = sessionRef.current;
+    const playback = playRef.current;
+    const speaker = speakerRef.current;
+    const reply = lastReplyRef.current;
+    if (!playback || !speaker || !reply || !isInCall(stateRef.current) || stateRef.current.speakerMuted) return;
+    speaker.clear();
+    const resumed = playback.resume();
+    const ready = await resumed;
+    if (session !== sessionRef.current || !isInCall(stateRef.current)) return;
+    if (!ready) {
+      setVoiceError("تعذر تشغيل الصوت. اضغط المحاولة مرة ثانية.");
+      return;
+    }
+    setVoiceError(null);
+    speaker.setFast(true);
+    speaker.push(reply, true);
+    speaker.finish();
+  }, []);
 
   const toggleMic = useCallback(() => {
     const nextMuted = !micMutedRef.current;
@@ -334,6 +381,8 @@ export function useVoiceCall() {
     beginSession,
     endCall,
     retry,
+    retryAudio,
+    canRetryAudio: Boolean((voiceError || lastReplyRef.current) && !state.speakerMuted),
     toggleMic,
     toggleSpeaker,
     mode,

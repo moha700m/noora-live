@@ -36,6 +36,11 @@ export function VoiceCall() {
               {call.voiceError}
             </p>
           ) : null}
+          {showCall && call.canRetryAudio ? (
+            <button type="button" className="rounded-full border border-teal/40 px-4 py-2 text-sm text-teal focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal" onClick={() => void call.retryAudio()}>
+              إعادة تشغيل آخر رد
+            </button>
+          ) : null}
           {call.state.phase === "error" && call.state.errorMessage ? (
             <p className="text-center text-sm text-coral" role="alert">
               {call.state.errorMessage}

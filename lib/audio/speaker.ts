@@ -1,12 +1,16 @@
-import { mergeTranscriptText } from "./transcript";
-import { takeSpeakable } from "./phrases";
+import { mergeTranscriptText } from "./transcript.ts";
+import { takeSpeakable } from "./phrases.ts";
 
 type Playback = {
-  enqueue: (pcm: Int16Array, sampleRate: number) => void;
+  enqueue: (pcm: Int16Array, sampleRate: number) => Promise<boolean>;
+  decode: (bytes: ArrayBuffer) => Promise<AudioBuffer>;
   clear: () => void;
 };
 
 export class PhraseSpeaker {
+  private readonly play: Playback;
+  private readonly onActive: () => void;
+  private readonly onError: (message: string) => void;
   private pending = "";
   private queue: string[] = [];
   private generation = 0;
@@ -18,10 +22,14 @@ export class PhraseSpeaker {
   private fast = false;
 
   constructor(
-    private readonly play: Playback,
-    private readonly onActive: () => void,
-    private readonly onError: (message: string) => void,
-  ) {}
+    play: Playback,
+    onActive: () => void,
+    onError: (message: string) => void,
+  ) {
+    this.play = play;
+    this.onActive = onActive;
+    this.onError = onError;
+  }
 
   setFast(fast: boolean): void {
     this.fast = fast;
@@ -89,7 +97,7 @@ export class PhraseSpeaker {
       }
     } finally {
       this.pumping = false;
-      if (this.queue.length > 0 && generation === this.generation) void this.pump();
+      if (this.queue.length > 0) void this.pump();
     }
   }
 
@@ -118,21 +126,19 @@ export class PhraseSpeaker {
       try {
         const bytes = await response.arrayBuffer();
         if (generation !== this.generation) return;
-        const ctx = new AudioContext();
-        try {
-          const audio = await ctx.decodeAudioData(bytes.slice(0));
-          const channel = audio.getChannelData(0);
-          const pcm = new Int16Array(channel.length);
-          for (let i = 0; i < channel.length; i += 1) {
-            const sample = Math.max(-1, Math.min(1, channel[i] ?? 0));
-            pcm[i] = sample < 0 ? sample * 0x8000 : sample * 0x7fff;
-          }
-          if (generation === this.generation) {
-            this.play.enqueue(pcm, audio.sampleRate);
-            this.onActive();
-          }
-        } finally {
-          await ctx.close();
+        const audio = await this.play.decode(bytes);
+        if (generation !== this.generation) return;
+        const channel = audio.getChannelData(0);
+        const pcm = new Int16Array(channel.length);
+        for (let i = 0; i < channel.length; i += 1) {
+          const sample = Math.max(-1, Math.min(1, channel[i] ?? 0));
+          pcm[i] = sample < 0 ? sample * 0x8000 : sample * 0x7fff;
+        }
+        if (generation === this.generation) {
+          const enqueued = await this.play.enqueue(pcm, audio.sampleRate);
+          if (generation !== this.generation) return;
+          if (enqueued) this.onActive();
+          else this.failOnce();
         }
       } catch {
         if (generation === this.generation && !controller.signal.aborted) this.failOnce();
@@ -144,6 +150,7 @@ export class PhraseSpeaker {
     try {
       while (generation === this.generation) {
         const chunk = await reader.read();
+        if (generation !== this.generation) break;
         if (chunk.done || !chunk.value) break;
         const merged = new Uint8Array(odd.length + chunk.value.length);
         merged.set(odd);
@@ -153,8 +160,11 @@ export class PhraseSpeaker {
         if (even < 2) continue;
         const copy = new Uint8Array(even);
         copy.set(merged.subarray(0, even));
-        this.play.enqueue(new Int16Array(copy.buffer), 24_000);
-        this.onActive();
+        if (generation !== this.generation) break;
+        const enqueued = await this.play.enqueue(new Int16Array(copy.buffer), 24_000);
+        if (generation !== this.generation) break;
+        if (enqueued) this.onActive();
+        else this.failOnce();
       }
     } catch {
       if (generation === this.generation && !controller.signal.aborted) this.failOnce();

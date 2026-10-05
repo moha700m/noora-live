@@ -6,7 +6,7 @@ test("mute stops the listening state and end call resets", () => {
   let state = reduceCall(initialCallState, { type: "START" });
   state = reduceCall(state, { type: "PERMISSION_GRANTED" });
   state = reduceCall(state, { type: "LIVE" });
-  assert.equal(statusLabel(state), "تستمع…");
+  assert.equal(statusLabel(state), "يستمع…");
   state = reduceCall(state, { type: "TOGGLE_MIC" });
   assert.equal(state.micMuted, true);
   assert.equal(state.phase, "muted");
