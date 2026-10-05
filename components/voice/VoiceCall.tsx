@@ -31,6 +31,11 @@ export function VoiceCall() {
             timer={showCall ? call.seconds : undefined}
             connected={showCall && call.state.phase !== "connecting" && call.state.phase !== "requesting_permission" && call.state.phase !== "error"}
           />
+          {call.voiceError ? (
+            <p className="text-center text-sm text-coral" role="alert">
+              {call.voiceError}
+            </p>
+          ) : null}
           {call.state.phase === "error" && call.state.errorMessage ? (
             <p className="text-center text-sm text-coral" role="alert">
               {call.state.errorMessage}

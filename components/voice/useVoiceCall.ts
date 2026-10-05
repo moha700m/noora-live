@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { MicrophoneCapture } from "../../lib/audio/microphone";
 import { PcmPlayback } from "../../lib/audio/playback";
 import { applyTranscript } from "../../lib/audio/transcript";
+import { shouldBarge, TurnBuffer } from "../../lib/audio/turn-buffer";
 import { formatDuration, initialCallState, isInCall, reduceCall, statusLabel } from "../../lib/call/machine";
 import type { CallState } from "../../lib/call/machine";
 import type { TranscriptLine } from "../../lib/gemini/types";
@@ -60,6 +61,7 @@ export function useVoiceCall() {
   const [seconds, setSeconds] = useState(0);
   const [level, setLevel] = useState(0);
   const [levelSource, setLevelSource] = useState<"user" | "assistant" | "idle">("idle");
+  const [voiceError, setVoiceError] = useState<string | null>(null);
 
   const stateRef = useRef(state);
   stateRef.current = state;
@@ -74,13 +76,13 @@ export function useVoiceCall() {
   const micMutedRef = useRef(false);
   const startedAt = useRef<number | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const chunksRef = useRef<Int16Array[]>([]);
-  const samplesRef = useRef(0);
   const busyRef = useRef(false);
   const historyRef = useRef<{ role: "user" | "assistant"; content: string }[]>([]);
+  const bufferRef = useRef(new TurnBuffer());
   const voiceSince = useRef<number | null>(null);
   const lastVoiceAt = useRef(0);
-  const heardSpeech = useRef(false);
+  const sessionRef = useRef(0);
+  const abortRef = useRef<AbortController | null>(null);
 
   const dispatch = useCallback((event: Parameters<typeof reduceCall>[1]) => {
     setState((current) => {
@@ -120,12 +122,15 @@ export function useVoiceCall() {
   }, []);
 
   const endCall = useCallback(async () => {
+    sessionRef.current += 1;
+    abortRef.current?.abort();
+    abortRef.current = null;
+    busyRef.current = false;
+    bufferRef.current.reset();
     dispatch({ type: "END" });
     stopTimer();
     startedAt.current = null;
-    chunksRef.current = [];
-    samplesRef.current = 0;
-    heardSpeech.current = false;
+    setVoiceError(null);
     await releaseAudio();
     setLevel(0);
     setLevelSource("idle");
@@ -133,15 +138,15 @@ export function useVoiceCall() {
   }, [dispatch, releaseAudio]);
 
   const flush = useCallback(async () => {
-    if (busyRef.current || micMutedRef.current || !heardSpeech.current) return;
-    const chunks = chunksRef.current;
-    const samples = samplesRef.current;
-    chunksRef.current = [];
-    samplesRef.current = 0;
-    heardSpeech.current = false;
+    if (busyRef.current || micMutedRef.current || !bufferRef.current.ready(false)) return;
+    const chunks = bufferRef.current.take();
     voiceSince.current = null;
     lastVoiceAt.current = 0;
-    if (samples < 16000 * 0.28) return;
+    if (!chunks) return;
+    const session = sessionRef.current;
+    const controller = new AbortController();
+    abortRef.current?.abort();
+    abortRef.current = controller;
     busyRef.current = true;
     dispatch({ type: "THINKING" });
     try {
@@ -149,8 +154,10 @@ export function useVoiceCall() {
       body.set("audio", wavBlob(chunks), "speech.wav");
       body.set("history", JSON.stringify(historyRef.current.slice(-10)));
       body.set("mode", modeRef.current);
-      const response = await fetch("/api/openai/turn", { method: "POST", body });
+      const response = await fetch("/api/openai/turn", { method: "POST", body, signal: controller.signal });
+      if (session !== sessionRef.current) return;
       const payload = (await response.json().catch(() => null)) as { ok?: boolean; heard?: string; reply?: string; message?: string } | null;
+      if (session !== sessionRef.current) return;
       if (!response.ok || !payload?.ok || !payload.reply) {
         dispatch({ type: "FAIL", message: payload?.message || MSG.connectFailed });
         return;
@@ -161,15 +168,17 @@ export function useVoiceCall() {
       }
       pushLine("assistant", payload.reply, true);
       historyRef.current.push({ role: "assistant", content: payload.reply });
+      setVoiceError(null);
       speakerRef.current?.setFast(true);
       speakerRef.current?.push(payload.reply, true);
       speakerRef.current?.finish();
       dispatch({ type: "ASSISTANT_SPEAKING" });
       setLevelSource("assistant");
-    } catch {
+    } catch (error) {
+      if (session !== sessionRef.current || (error instanceof DOMException && error.name === "AbortError")) return;
       dispatch({ type: "FAIL", message: MSG.connectFailed });
     } finally {
-      busyRef.current = false;
+      if (session === sessionRef.current) busyRef.current = false;
     }
   }, [dispatch, pushLine]);
 
@@ -178,6 +187,15 @@ export function useVoiceCall() {
       dispatch({ type: "FAIL", message: window.isSecureContext ? MSG.unsupported : MSG.insecure });
       return;
     }
+    sessionRef.current += 1;
+    abortRef.current?.abort();
+    abortRef.current = null;
+    busyRef.current = false;
+    bufferRef.current.reset();
+    voiceSince.current = null;
+    lastVoiceAt.current = 0;
+    setVoiceError(null);
+    await releaseAudio();
     dispatch({ type: "START" });
     const context = new AudioContext();
     audioRef.current = context;
@@ -187,11 +205,13 @@ export function useVoiceCall() {
     const speaker = new PhraseSpeaker(
       playback,
       () => {
+        setVoiceError(null);
         dispatch({ type: "ASSISTANT_SPEAKING" });
         setLevelSource("assistant");
       },
       () => {
-        /* voice failure should not kill the call */
+        setVoiceError("تعذر تشغيل الصوت. المكالمة مستمرة، تقدر تتكلم.");
+        dispatch({ type: "LISTENING" });
       },
     );
     speakerRef.current = speaker;
@@ -208,24 +228,23 @@ export function useVoiceCall() {
         if (talking) {
           if (!voiceSince.current) voiceSince.current = now;
           lastVoiceAt.current = now;
-          heardSpeech.current = true;
           if (now - voiceSince.current > 140) dispatch({ type: "USER_SPEAKING", active: true });
-          if (speakerRef.current?.busy && now - voiceSince.current > 320) {
-            speakerRef.current.clear();
+          const sustained = now - voiceSince.current;
+          if (shouldBarge(Boolean(speakerRef.current?.busy), Boolean(playRef.current?.pending), sustained)) {
+            speakerRef.current?.clear();
             playRef.current?.clear();
           }
           return;
         }
         if (voiceSince.current && now - lastVoiceAt.current > 260) voiceSince.current = null;
-        if (busyRef.current || speakerRef.current?.busy || !heardSpeech.current) return;
+        if (busyRef.current || speakerRef.current?.busy || playRef.current?.pending) return;
         const gap = modeRef.current === "group" ? 1300 : 750;
-        if (lastVoiceAt.current && now - lastVoiceAt.current > gap && samplesRef.current > 16000 * 0.28) void flush();
+        if (lastVoiceAt.current && now - lastVoiceAt.current > gap && bufferRef.current.ready(false)) void flush();
       },
       onPcm: (pcm) => {
         if (micMutedRef.current || busyRef.current) return;
-        chunksRef.current.push(pcm);
-        samplesRef.current += pcm.length;
-        if (samplesRef.current > 16000 * 14 && heardSpeech.current) void flush();
+        const talking = Date.now() - lastVoiceAt.current < 260;
+        bufferRef.current.push(pcm, talking);
       },
     });
     micRef.current = mic;
@@ -291,6 +310,8 @@ export function useVoiceCall() {
 
   useEffect(() => {
     return () => {
+      sessionRef.current += 1;
+      abortRef.current?.abort();
       speakerRef.current?.clear();
       micRef.current?.stop();
       void playRef.current?.close();
@@ -309,6 +330,7 @@ export function useVoiceCall() {
     seconds: formatDuration(seconds),
     level,
     levelSource,
+    voiceError,
     beginSession,
     endCall,
     retry,
