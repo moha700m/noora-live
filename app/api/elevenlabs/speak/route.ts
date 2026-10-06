@@ -37,20 +37,23 @@ export async function GET(request: Request) {
   return json({ ok: true, cacheVersion: `${voiceId}:${CACHE_SETTINGS_VERSION}` }, 200);
 }
 
-async function waitForAudio(key: string, id: string): Promise<string | null> {
+async function waitForAudio(key: string, id: string): Promise<{ url?: string; reason?: string }> {
   const deadline = Date.now() + 18_000;
   while (Date.now() < deadline) {
     await new Promise((resolve) => setTimeout(resolve, 250));
     const detail = await fetch(`${VIBI}/v1/history/${id}`, { headers: { "xi-api-key": key }, cache: "no-store" });
-    if (!detail.ok) continue;
+    if (!detail.ok) {
+      if (detail.status === 401 || detail.status === 403 || detail.status === 402) return { reason: `history_${detail.status}` };
+      continue;
+    }
     const body = (await detail.json()) as {
       status?: string;
       result?: { audio_url?: string };
     };
-    if (body.status === "failed") return null;
-    if (body.status === "completed" && body.result?.audio_url) return body.result.audio_url;
+    if (body.status === "failed") return { reason: "generation_failed" };
+    if (body.status === "completed" && body.result?.audio_url) return { url: body.result.audio_url };
   }
-  return null;
+  return { reason: "generation_timeout" };
 }
 
 export async function POST(request: Request) {
@@ -75,6 +78,7 @@ export async function POST(request: Request) {
   if (!voiceId) return json({ ok: false, message: "معرف الصوت غير صالح." }, 400);
 
   let taskId = "";
+  let createStatus = 0;
   for (const model of MODELS) {
     const created = await fetch(`${VIBI}/v1/text-to-speech/${voiceId}`, {
       method: "POST",
@@ -87,6 +91,7 @@ export async function POST(request: Request) {
         voice_settings: { stability: 0.35, similarity_boost: 0.75, speed: 1.2 },
       }),
     });
+    createStatus = created.status;
     if (!created.ok) continue;
     const task = (await created.json()) as { id?: string };
     if (task.id) {
@@ -94,12 +99,12 @@ export async function POST(request: Request) {
       break;
     }
   }
-  if (!taskId) return json({ ok: false, message: "تعذر تشغيل صوت المساعدة." }, 502);
+  if (!taskId) return speechFailure(`create_${createStatus}`);
 
-  const audioUrl = await waitForAudio(key, taskId);
-  if (!audioUrl) return json({ ok: false, message: "تعذر تشغيل صوت المساعدة." }, 502);
-  const audio = await fetch(audioUrl, { headers: { "xi-api-key": key }, cache: "no-store" });
-  if (!audio.ok || !audio.body) return json({ ok: false, message: "تعذر تشغيل صوت المساعدة." }, 502);
+  const result = await waitForAudio(key, taskId);
+  if (!result.url) return speechFailure(result.reason || "generation_failed");
+  const audio = await fetch(result.url, { headers: { "xi-api-key": key }, cache: "no-store" });
+  if (!audio.ok || !audio.body) return speechFailure(`download_${audio.status}`);
   return new Response(audio.body, {
     status: 200,
     headers: {
@@ -107,4 +112,9 @@ export async function POST(request: Request) {
       "cache-control": "no-store",
     },
   });
+}
+
+function speechFailure(code: string) {
+  console.warn("vibi_speech_failed", { code });
+  return json({ ok: false, code, message: code === "generation_timeout" ? "تأخر تجهيز الصوت؛ جرّب مرة ثانية بعد شوي." : "تعذر تجهيز صوت بو نايف؛ جرّب مرة ثانية." }, 502);
 }
