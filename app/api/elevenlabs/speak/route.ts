@@ -6,12 +6,12 @@ import { validatePhraseText } from "../../../../lib/soundboard/validation";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
-export const maxDuration = 30;
-const CACHE_SETTINGS_VERSION = "eleven-flash-ar-v1-035-075-120";
+export const maxDuration = 60;
+const CACHE_SETTINGS_VERSION = "eleven-v3-ar-natural-v1-050-075";
 
 const hits = new Map<string, { count: number; reset: number }>();
 const VIBI = "https://api.vibi.pro";
-const MODELS = ["eleven_flash_v2_5", "eleven_turbo_v2_5", "eleven_multilingual_v2"];
+const MODELS = ["eleven_v3"];
 
 function limited(request: Request): boolean {
   const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "local";
@@ -38,7 +38,7 @@ export async function GET(request: Request) {
 }
 
 async function waitForAudio(key: string, id: string): Promise<{ url?: string; reason?: string }> {
-  const deadline = Date.now() + 18_000;
+  const deadline = Date.now() + 40_000;
   while (Date.now() < deadline) {
     await new Promise((resolve) => setTimeout(resolve, 250));
     const detail = await fetch(`${VIBI}/v1/history/${id}`, { headers: { "xi-api-key": key }, cache: "no-store" });
@@ -88,7 +88,7 @@ export async function POST(request: Request) {
         model_id: model,
         language_code: "ar",
         provider: "elevenlabs",
-        voice_settings: { stability: 0.35, similarity_boost: 0.75, speed: 1.2 },
+        voice_settings: { stability: 0.5, similarity_boost: 0.75 },
       }),
     });
     createStatus = created.status;
