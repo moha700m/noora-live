@@ -1,7 +1,5 @@
-"use client";
-
-import { VoiceCall } from "../components/voice/VoiceCall";
+import { Soundboard } from "../components/soundboard/Soundboard";
 
 export default function HomePage() {
-  return <VoiceCall />;
+  return <Soundboard />;
 }

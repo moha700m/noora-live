@@ -2,10 +2,12 @@ import { isAllowedTokenRequest } from "../../../../lib/gemini/origin";
 import { json } from "../../../../lib/http/json";
 import { isVoiceId } from "../../../../lib/settings/model";
 import { loadSettings } from "../../../../lib/settings/store";
+import { validatePhraseText } from "../../../../lib/soundboard/validation";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 export const maxDuration = 30;
+const CACHE_SETTINGS_VERSION = "eleven-flash-ar-v1-035-075-120";
 
 const hits = new Map<string, { count: number; reset: number }>();
 const VIBI = "https://api.vibi.pro";
@@ -25,6 +27,14 @@ function limited(request: Request): boolean {
 
 function headers(key: string): HeadersInit {
   return { "xi-api-key": key, "content-type": "application/json" };
+}
+
+export async function GET(request: Request) {
+  if (!isAllowedTokenRequest(request)) return json({ ok: false }, 403);
+  const settings = await loadSettings();
+  const voiceId = isVoiceId(settings.voiceId) ? settings.voiceId : "";
+  if (!voiceId) return json({ ok: false }, 400);
+  return json({ ok: true, cacheVersion: `${voiceId}:${CACHE_SETTINGS_VERSION}` }, 200);
 }
 
 async function waitForAudio(key: string, id: string): Promise<string | null> {
@@ -49,14 +59,16 @@ export async function POST(request: Request) {
   const key = process.env.VIBI_API_KEY?.trim();
   if (!key) return json({ ok: false, message: "صوت Vibi غير مفعّل بعد." }, 503);
 
-  let text = "";
+  let rawText: unknown = "";
   try {
     const body = (await request.json()) as { text?: unknown };
-    text = typeof body.text === "string" ? body.text.trim().slice(0, 280) : "";
+    rawText = body.text;
   } catch {
-    text = "";
+    rawText = "";
   }
-  if (text.length < 2) return json({ ok: false, message: "النص قصير." }, 400);
+  const validated = validatePhraseText(rawText);
+  if (validated.error) return json({ ok: false, message: validated.error }, 400);
+  const text = validated.text;
 
   const settings = await loadSettings();
   const voiceId = isVoiceId(settings.voiceId) ? settings.voiceId : "";
